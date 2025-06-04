@@ -15,12 +15,21 @@ export declare class ProductService {
     private firebaseProvider;
     private readonly productRepo;
     constructor(firebaseProvider: FirebaseProvider, productRepo: Repository<Product>);
-    getPagination({ pageSize, pageIndex, order, columnDef, customerUserId, }: {
+    getClientPagination({ pageSize, pageIndex, order, columnDef, customerUserId, }: {
         pageSize: any;
         pageIndex: any;
         order: any;
         columnDef: any;
         customerUserId: any;
+    }): Promise<{
+        results: Product[];
+        total: number;
+    }>;
+    getPagination({ pageSize, pageIndex, order, columnDef }: {
+        pageSize: any;
+        pageIndex: any;
+        order: any;
+        columnDef: any;
     }): Promise<{
         results: Product[];
         total: number;
@@ -43,7 +52,6 @@ export declare class ProductService {
         name: string;
         shortDesc: string;
         price: string;
-        discountPrice: string;
         size: string;
         longDesc: string;
         active: boolean;
@@ -61,6 +69,5 @@ export declare class ProductService {
     }>;
     create(dto: CreateProductDto): Promise<Product>;
     update(sku: any, dto: UpdateProductDto): Promise<Product>;
-    batchUpdateDiscountPrice(skuIds: string): Promise<Product[]>;
     delete(sku: any): Promise<Product>;
 }

@@ -18,6 +18,7 @@ const swagger_1 = require("@nestjs/swagger");
 const api_response_constant_1 = require("../../common/constant/api-response.constant");
 const product_create_dto_1 = require("../../core/dto/product/product.create.dto");
 const product_update_dto_1 = require("../../core/dto/product/product.update.dto");
+const pagination_params_dto_1 = require("../../core/dto/pagination-params.dto");
 const product_service_1 = require("../../services/product.service");
 let ProductController = class ProductController {
     constructor(productService) {
@@ -36,10 +37,23 @@ let ProductController = class ProductController {
             return res;
         }
     }
-    async getPagination(params) {
+    async getPagination(paginationParams) {
         const res = {};
         try {
-            res.data = await this.productService.getPagination(params);
+            res.data = await this.productService.getPagination(paginationParams);
+            res.success = true;
+            return res;
+        }
+        catch (e) {
+            res.success = false;
+            res.message = e.message !== undefined ? e.message : e;
+            return res;
+        }
+    }
+    async getClientPagination(params) {
+        const res = {};
+        try {
+            res.data = await this.productService.getClientPagination(params);
             res.success = true;
             return res;
         }
@@ -68,20 +82,6 @@ let ProductController = class ProductController {
             res.data = await this.productService.create(accessDto);
             res.success = true;
             res.message = `Product ${api_response_constant_1.SAVING_SUCCESS}`;
-            return res;
-        }
-        catch (e) {
-            res.success = false;
-            res.message = e.message !== undefined ? e.message : e;
-            return res;
-        }
-    }
-    async batchUpdateDiscountPrice(dto) {
-        const res = {};
-        try {
-            res.data = await this.productService.batchUpdateDiscountPrice(dto.skus);
-            res.success = true;
-            res.message = `Product ${api_response_constant_1.UPDATE_SUCCESS}`;
             return res;
         }
         catch (e) {
@@ -128,6 +128,13 @@ __decorate([
 ], ProductController.prototype, "getDetails", null);
 __decorate([
     (0, common_1.Post)("/page"),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [pagination_params_dto_1.PaginationParamsDto]),
+    __metadata("design:returntype", Promise)
+], ProductController.prototype, "getPagination", null);
+__decorate([
+    (0, common_1.Post)("/client-pagination"),
     (0, swagger_1.ApiBody)({
         schema: {
             type: "object",
@@ -157,7 +164,7 @@ __decorate([
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
-], ProductController.prototype, "getPagination", null);
+], ProductController.prototype, "getClientPagination", null);
 __decorate([
     (0, common_1.Post)("/get-search-filter"),
     (0, swagger_1.ApiBody)({
@@ -193,22 +200,6 @@ __decorate([
     __metadata("design:paramtypes", [product_create_dto_1.CreateProductDto]),
     __metadata("design:returntype", Promise)
 ], ProductController.prototype, "create", null);
-__decorate([
-    (0, common_1.Post)("batch-update-discount-price"),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: "object",
-            properties: {
-                skus: { type: "string" },
-            },
-            required: ["skus"],
-        },
-    }),
-    __param(0, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], ProductController.prototype, "batchUpdateDiscountPrice", null);
 __decorate([
     (0, common_1.Put)("/:sku"),
     __param(0, (0, common_1.Param)("sku")),

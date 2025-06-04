@@ -41,10 +41,6 @@ __decorate([
     __metadata("design:type", String)
 ], Product.prototype, "price", void 0);
 __decorate([
-    (0, typeorm_1.Column)("numeric", { name: "DiscountPrice", default: () => "0" }),
-    __metadata("design:type", String)
-], Product.prototype, "discountPrice", void 0);
-__decorate([
     (0, typeorm_1.Column)("numeric", { name: "Size", default: () => "0" }),
     __metadata("design:type", String)
 ], Product.prototype, "size", void 0);

@@ -11,7 +11,6 @@ export declare class Product {
     name: string;
     shortDesc: string;
     price: string;
-    discountPrice: string;
     size: string;
     longDesc: string;
     active: boolean;

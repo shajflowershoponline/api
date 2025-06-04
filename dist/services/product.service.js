@@ -29,14 +29,13 @@ const ProductImage_1 = require("../db/entities/ProductImage");
 const GiftAddOns_1 = require("../db/entities/GiftAddOns");
 const Discounts_1 = require("../db/entities/Discounts");
 const Collection_1 = require("../db/entities/Collection");
-const ProductCollection_1 = require("../db/entities/ProductCollection");
 const CustomerUserWishlist_1 = require("../db/entities/CustomerUserWishlist");
 let ProductService = class ProductService {
     constructor(firebaseProvider, productRepo) {
         this.firebaseProvider = firebaseProvider;
         this.productRepo = productRepo;
     }
-    async getPagination({ pageSize, pageIndex, order, columnDef, customerUserId, }) {
+    async getClientPagination({ pageSize, pageIndex, order, columnDef, customerUserId, }) {
         const skip = Number(pageIndex) > 0 ? Number(pageIndex) * Number(pageSize) : 0;
         const take = Number(pageSize);
         const newColDef = [];
@@ -51,7 +50,84 @@ let ProductService = class ProductService {
         }
         const condition = (0, utils_1.columnDefToTypeORMCondition)(newColDef);
         const collectionCondition = (0, utils_1.columnDefToTypeORMCondition)(collectionClDef);
-        const [results, total, productCollection, customerUserWishlist] = await Promise.all([
+        const [results, total, customerUserWishlist, discounts] = await Promise.all([
+            this.productRepo.find({
+                where: Object.assign(Object.assign({}, condition), { active: true, productCollections: collectionCondition }),
+                relations: {
+                    productImages: {
+                        file: true,
+                    },
+                    category: {
+                        thumbnailFile: true,
+                    },
+                    productCollections: {
+                        collection: true,
+                    },
+                },
+                skip,
+                take,
+                order,
+            }),
+            this.productRepo.count({
+                where: Object.assign(Object.assign({}, condition), { active: true, productCollections: collectionCondition }),
+            }),
+            this.productRepo.manager.find(CustomerUserWishlist_1.CustomerUserWishlist, {
+                where: {
+                    customerUser: {
+                        customerUserId,
+                    },
+                },
+                relations: {
+                    customerUser: true,
+                    product: true,
+                },
+            }),
+            this.productRepo.manager.find(Discounts_1.Discounts, {
+                where: {
+                    active: true,
+                },
+            }),
+        ]);
+        return {
+            results: results.map((p) => {
+                var _a, _b, _c;
+                const maxDiscount = ((_a = p.discountTagsIds) !== null && _a !== void 0 ? _a : "") !== ""
+                    ? Math.max(...discounts
+                        .filter((d) => p.discountTagsIds.split(",").includes(d.discountId))
+                        .map((d) => {
+                        var _a;
+                        return d.type === "PERCENT"
+                            ? (parseFloat(d.value) / 100) * Number((_a = p.price) !== null && _a !== void 0 ? _a : 0)
+                            : parseFloat(d.value);
+                    }))
+                    : 0;
+                p["discountPrice"] = (Number((_b = p.price) !== null && _b !== void 0 ? _b : 0) - maxDiscount).toString();
+                p["isSale"] =
+                    p.productCollections.some((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId && x.collection.isSale; }) || ((_c = p.discountTagsIds) !== null && _c !== void 0 ? _c : "").split(", ").length > 0;
+                p["iAmInterested"] = customerUserWishlist.some((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId; });
+                p["customerUserWishlist"] = customerUserWishlist.find((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId; });
+                return p;
+            }),
+            total,
+        };
+    }
+    async getPagination({ pageSize, pageIndex, order, columnDef }) {
+        var _a;
+        const skip = Number(pageIndex) > 0 ? Number(pageIndex) * Number(pageSize) : 0;
+        const take = Number(pageSize);
+        const newColDef = [];
+        const collectionClDef = [];
+        for (const col of columnDef) {
+            if ((_a = col === null || col === void 0 ? void 0 : col.name) === null || _a === void 0 ? void 0 : _a.includes("collection")) {
+                collectionClDef.push(col);
+            }
+            else {
+                newColDef.push(col);
+            }
+        }
+        const condition = (0, utils_1.columnDefToTypeORMCondition)(newColDef);
+        const collectionCondition = (0, utils_1.columnDefToTypeORMCondition)(collectionClDef);
+        const [results, total] = await Promise.all([
             this.productRepo.find({
                 where: Object.assign(Object.assign({}, condition), { active: true, productCollections: collectionCondition }),
                 relations: {
@@ -70,35 +146,9 @@ let ProductService = class ProductService {
             this.productRepo.count({
                 where: Object.assign(Object.assign({}, condition), { active: true, productCollections: collectionCondition }),
             }),
-            this.productRepo.manager.find(ProductCollection_1.ProductCollection, {
-                where: {
-                    product: Object.assign(Object.assign({}, condition), { active: true, productCollections: collectionCondition }),
-                    active: true,
-                },
-                relations: {
-                    collection: true,
-                    product: true,
-                },
-            }),
-            this.productRepo.manager.find(CustomerUserWishlist_1.CustomerUserWishlist, {
-                where: {
-                    customerUser: {
-                        customerUserId,
-                    },
-                },
-                relations: {
-                    customerUser: true,
-                    product: true,
-                },
-            }),
         ]);
         return {
-            results: results.map((p) => {
-                p.productCollections = productCollection.filter((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId; });
-                p["iAmInterested"] = customerUserWishlist.some((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId; });
-                p["customerUserWishlist"] = customerUserWishlist.find((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId; });
-                return p;
-            }),
+            results,
             total,
         };
     }
@@ -162,7 +212,7 @@ let ProductService = class ProductService {
         };
     }
     async getBySku(sku) {
-        var _a, _b;
+        var _a, _b, _c;
         const result = await this.productRepo.findOne({
             where: {
                 sku,
@@ -175,22 +225,35 @@ let ProductService = class ProductService {
                 category: {
                     thumbnailFile: true,
                 },
+                productCollections: {
+                    collection: true,
+                },
             },
         });
         if (!result) {
             throw Error(product_constant_1.PRODUCT_ERROR_NOT_FOUND);
         }
+        const selectedDiscounts = await this.productRepo.manager.find(Discounts_1.Discounts, {
+            where: {
+                discountId: (0, typeorm_2.In)(((_a = result.discountTagsIds) !== null && _a !== void 0 ? _a : "0").split(",").map((x) => Number(x))),
+                active: true,
+            },
+        });
+        const maxDiscount = Math.max(...selectedDiscounts
+            .filter((d) => { var _a; return (_a = result.discountTagsIds) !== null && _a !== void 0 ? _a : "0".split(",").includes(d.discountId); })
+            .map((d) => {
+            var _a;
+            return d.type === "PERCENT"
+                ? (parseFloat(d.value) / 100) * Number((_a = result.price) !== null && _a !== void 0 ? _a : 0)
+                : parseFloat(d.value);
+        }));
+        result["discountPrice"] = (Number((_b = result.price) !== null && _b !== void 0 ? _b : 0) - maxDiscount).toString();
         return Object.assign(Object.assign({}, result), { selectedGiftAddOns: await this.productRepo.manager.find(GiftAddOns_1.GiftAddOns, {
                 where: {
-                    giftAddOnId: (0, typeorm_2.In)(((_a = result.giftAddOnsAvailable) !== null && _a !== void 0 ? _a : "0").split(",")),
+                    giftAddOnId: (0, typeorm_2.In)(((_c = result.giftAddOnsAvailable) !== null && _c !== void 0 ? _c : "0").split(",").map((x) => Number(x))),
                     active: true,
                 },
-            }), selectedDiscounts: await this.productRepo.manager.find(Discounts_1.Discounts, {
-                where: {
-                    discountId: (0, typeorm_2.In)(((_b = result.discountTagsIds) !== null && _b !== void 0 ? _b : "0").split(",")),
-                    active: true,
-                },
-            }) });
+            }), selectedDiscounts });
     }
     async create(dto) {
         return await this.productRepo.manager.transaction(async (entityManager) => {
@@ -233,26 +296,6 @@ let ProductService = class ProductService {
                     throw Error(`The following Discounts not found, ${missingDiscount.join(", ")}`);
                 }
                 product.discountTagsIds = dto.discountTagsIds.join(", ");
-                const discounts = await entityManager.find(Discounts_1.Discounts, {
-                    where: {
-                        discountId: (0, typeorm_2.In)(dto.discountTagsIds),
-                    },
-                });
-                if (discounts.length > 0) {
-                    const bestDiscount = discounts
-                        .map((discount) => {
-                        var _a, _b;
-                        const discountAmount = discount.type === "PERCENT"
-                            ? (Number((_a = discount.value) !== null && _a !== void 0 ? _a : 0) / 100) * Number((_b = dto.price) !== null && _b !== void 0 ? _b : 0)
-                            : discount.value;
-                        return Object.assign(Object.assign({}, discount), { discountAmount });
-                    })
-                        .reduce((max, current) => current.discountAmount > max.discountAmount ? current : max);
-                    product.discountPrice = bestDiscount.toString();
-                }
-                else {
-                    product.discountPrice = dto.price;
-                }
                 product = await entityManager.save(Product_1.Product, product);
                 product.sku = `P${(0, utils_1.generateIndentityCode)(product.productId)}`;
                 product = await entityManager.save(Product_1.Product, product);
@@ -304,7 +347,7 @@ let ProductService = class ProductService {
     }
     async update(sku, dto) {
         return await this.productRepo.manager.transaction(async (entityManager) => {
-            var _a, _b, _c, _d, _e;
+            var _a, _b, _c;
             try {
                 let product = await entityManager.findOne(Product_1.Product, {
                     where: {
@@ -349,28 +392,6 @@ let ProductService = class ProductService {
                     throw Error(`The following Discounts not found, ${missingDiscount.join(", ")}`);
                 }
                 product.discountTagsIds = dto.discountTagsIds.join(", ");
-                const discounts = await entityManager.find(Discounts_1.Discounts, {
-                    where: {
-                        discountId: (0, typeorm_2.In)(dto.discountTagsIds),
-                    },
-                });
-                if (discounts.length > 0) {
-                    const bestDiscount = discounts
-                        .map((discount) => {
-                        var _a, _b;
-                        const discountAmount = discount.type === "PERCENT"
-                            ? (Number((_a = discount.value) !== null && _a !== void 0 ? _a : 0) / 100) * Number((_b = dto.price) !== null && _b !== void 0 ? _b : 0)
-                            : discount.value;
-                        return Object.assign(Object.assign({}, discount), { discountAmount });
-                    })
-                        .reduce((max, current) => current.discountAmount > max.discountAmount ? current : max);
-                    product.discountPrice = (Number((_a = dto.price) !== null && _a !== void 0 ? _a : 0) >= Number(bestDiscount.discountAmount)
-                        ? Number((_b = dto.price) !== null && _b !== void 0 ? _b : 0) - Number(bestDiscount.discountAmount)
-                        : dto.price).toString();
-                }
-                else {
-                    product.discountPrice = dto.price;
-                }
                 product = await entityManager.save(Product_1.Product, product);
                 product = await entityManager.findOne(Product_1.Product, {
                     where: {
@@ -395,7 +416,7 @@ let ProductService = class ProductService {
                             try {
                                 const productImage = await entityManager.findOne(ProductImage_1.ProductImage, {
                                     where: {
-                                        file: { guid: (_c = oldItem === null || oldItem === void 0 ? void 0 : oldItem.file) === null || _c === void 0 ? void 0 : _c.guid },
+                                        file: { guid: (_a = oldItem === null || oldItem === void 0 ? void 0 : oldItem.file) === null || _a === void 0 ? void 0 : _a.guid },
                                     },
                                     relations: {
                                         file: true,
@@ -403,7 +424,7 @@ let ProductService = class ProductService {
                                 });
                                 await entityManager.delete(ProductImage_1.ProductImage, productImage);
                                 await entityManager.delete(File_1.File, productImage.file);
-                                const deleteFile = bucket.file(`product/${product.sku}/${(_d = oldItem === null || oldItem === void 0 ? void 0 : oldItem.file) === null || _d === void 0 ? void 0 : _d.guid}${(0, path_1.extname)((_e = oldItem === null || oldItem === void 0 ? void 0 : oldItem.file) === null || _e === void 0 ? void 0 : _e.fileName)}`);
+                                const deleteFile = bucket.file(`product/${product.sku}/${(_b = oldItem === null || oldItem === void 0 ? void 0 : oldItem.file) === null || _b === void 0 ? void 0 : _b.guid}${(0, path_1.extname)((_c = oldItem === null || oldItem === void 0 ? void 0 : oldItem.file) === null || _c === void 0 ? void 0 : _c.fileName)}`);
                                 const exists = await deleteFile.exists();
                                 if (exists[0]) {
                                     deleteFile.delete();
@@ -448,60 +469,6 @@ let ProductService = class ProductService {
                     }
                 }
                 return product;
-            }
-            catch (ex) {
-                if (ex.message.includes("duplicate")) {
-                    throw Error(product_constant_1.PRODUCT_ERROR_DUPLICATE);
-                }
-                else {
-                    throw ex;
-                }
-            }
-        });
-    }
-    async batchUpdateDiscountPrice(skuIds) {
-        return await this.productRepo.manager.transaction(async (entityManager) => {
-            var _a, _b;
-            try {
-                const products = await entityManager.find(Product_1.Product, {
-                    where: {
-                        sku: (0, typeorm_2.In)(skuIds.split(", ")),
-                        active: true,
-                    },
-                });
-                for (let product of products) {
-                    const discounts = await entityManager.find(Discounts_1.Discounts, {
-                        where: {
-                            discountId: (0, typeorm_2.In)(product.discountTagsIds.split(",")),
-                        },
-                    });
-                    if (discounts) {
-                        const bestDiscount = discounts
-                            .map((discount) => {
-                            var _a, _b;
-                            const discountAmount = discount.type === "PERCENT"
-                                ? (Number((_a = discount.value) !== null && _a !== void 0 ? _a : 0) / 100) *
-                                    Number((_b = product.price) !== null && _b !== void 0 ? _b : 0)
-                                : discount.value;
-                            return Object.assign(Object.assign({}, discount), { discountAmount });
-                        })
-                            .reduce((max, current) => current.discountAmount > max.discountAmount ? current : max);
-                        product.discountPrice = (Number((_a = product.price) !== null && _a !== void 0 ? _a : 0) >= Number(bestDiscount.discountAmount)
-                            ? Number((_b = product.price) !== null && _b !== void 0 ? _b : 0) -
-                                Number(bestDiscount.discountAmount)
-                            : product.price).toString();
-                    }
-                    else {
-                        product.discountPrice = product.price;
-                    }
-                    product = await entityManager.save(Product_1.Product, product);
-                }
-                return await entityManager.find(Product_1.Product, {
-                    where: {
-                        sku: (0, typeorm_2.In)(skuIds.split(", ")),
-                        active: true,
-                    },
-                });
             }
             catch (ex) {
                 if (ex.message.includes("duplicate")) {

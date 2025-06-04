@@ -34,7 +34,7 @@ export class ProductService {
     private readonly productRepo: Repository<Product>
   ) {}
 
-  async getPagination({
+  async getClientPagination({
     pageSize,
     pageIndex,
     order,
@@ -56,8 +56,8 @@ export class ProductService {
     }
     const condition = columnDefToTypeORMCondition(newColDef);
     const collectionCondition = columnDefToTypeORMCondition(collectionClDef);
-    const [results, total, productCollection, customerUserWishlist] =
-      await Promise.all([
+    const [results, total, customerUserWishlist, discounts] = await Promise.all(
+      [
         this.productRepo.find({
           where: {
             ...condition,
@@ -71,7 +71,9 @@ export class ProductService {
             category: {
               thumbnailFile: true,
             },
-            productCollections: true,
+            productCollections: {
+              collection: true,
+            },
           },
           skip,
           take,
@@ -82,20 +84,6 @@ export class ProductService {
             ...condition,
             active: true,
             productCollections: collectionCondition,
-          },
-        }),
-        this.productRepo.manager.find(ProductCollection, {
-          where: {
-            product: {
-              ...condition,
-              active: true,
-              productCollections: collectionCondition,
-            },
-            active: true,
-          },
-          relations: {
-            collection: true,
-            product: true,
           },
         }),
         this.productRepo.manager.find(CustomerUserWishlist, {
@@ -109,12 +97,34 @@ export class ProductService {
             product: true,
           },
         }),
-      ]);
+        this.productRepo.manager.find(Discounts, {
+          where: {
+            active: true,
+          },
+        }),
+      ]
+    );
     return {
       results: results.map((p) => {
-        p.productCollections = productCollection.filter(
-          (x) => x.product?.productId === p.productId
-        );
+        const maxDiscount =
+          (p.discountTagsIds ?? "") !== ""
+            ? Math.max(
+                ...discounts
+                  .filter((d) =>
+                    p.discountTagsIds.split(",").includes(d.discountId)
+                  )
+                  .map((d) =>
+                    d.type === "PERCENT"
+                      ? (parseFloat(d.value) / 100) * Number(p.price ?? 0)
+                      : parseFloat(d.value)
+                  )
+              )
+            : 0;
+        p["discountPrice"] = (Number(p.price ?? 0) - maxDiscount).toString();
+        p["isSale"] =
+          p.productCollections.some(
+            (x) => x.product?.productId === p.productId && x.collection.isSale
+          ) || (p.discountTagsIds ?? "").split(", ").length > 0;
         p["iAmInterested"] = customerUserWishlist.some(
           (x) => x.product?.productId === p.productId
         );
@@ -123,6 +133,56 @@ export class ProductService {
         );
         return p;
       }),
+      total,
+    };
+  }
+
+  async getPagination({ pageSize, pageIndex, order, columnDef }) {
+    const skip =
+      Number(pageIndex) > 0 ? Number(pageIndex) * Number(pageSize) : 0;
+    const take = Number(pageSize);
+
+    const newColDef = [];
+    const collectionClDef = [];
+    for (const col of columnDef) {
+      if (col?.name?.includes("collection")) {
+        collectionClDef.push(col);
+      } else {
+        newColDef.push(col);
+      }
+    }
+    const condition = columnDefToTypeORMCondition(newColDef);
+    const collectionCondition = columnDefToTypeORMCondition(collectionClDef);
+    const [results, total] = await Promise.all([
+      this.productRepo.find({
+        where: {
+          ...condition,
+          active: true,
+          productCollections: collectionCondition,
+        },
+        relations: {
+          productImages: {
+            file: true,
+          },
+          category: {
+            thumbnailFile: true,
+          },
+          productCollections: true,
+        },
+        skip,
+        take,
+        order,
+      }),
+      this.productRepo.count({
+        where: {
+          ...condition,
+          active: true,
+          productCollections: collectionCondition,
+        },
+      }),
+    ]);
+    return {
+      results,
       total,
     };
   }
@@ -218,25 +278,47 @@ export class ProductService {
         category: {
           thumbnailFile: true,
         },
+        productCollections: {
+          collection: true,
+        },
       },
     });
     if (!result) {
       throw Error(PRODUCT_ERROR_NOT_FOUND);
     }
+    const selectedDiscounts = await this.productRepo.manager.find(Discounts, {
+      where: {
+        discountId: In(
+          (result.discountTagsIds ?? "0").split(",").map((x) => Number(x))
+        ),
+        active: true,
+      },
+    });
+    const maxDiscount = Math.max(
+      ...selectedDiscounts
+        .filter(
+          (d) => result.discountTagsIds ?? "0".split(",").includes(d.discountId)
+        )
+        .map((d) =>
+          d.type === "PERCENT"
+            ? (parseFloat(d.value) / 100) * Number(result.price ?? 0)
+            : parseFloat(d.value)
+        )
+    );
+    result["discountPrice"] = (
+      Number(result.price ?? 0) - maxDiscount
+    ).toString();
     return {
       ...result,
       selectedGiftAddOns: await this.productRepo.manager.find(GiftAddOns, {
         where: {
-          giftAddOnId: In((result.giftAddOnsAvailable ?? "0").split(",")),
+          giftAddOnId: In(
+            (result.giftAddOnsAvailable ?? "0").split(",").map((x) => Number(x))
+          ),
           active: true,
         },
       }),
-      selectedDiscounts: await this.productRepo.manager.find(Discounts, {
-        where: {
-          discountId: In((result.discountTagsIds ?? "0").split(",")),
-          active: true,
-        },
-      }),
+      selectedDiscounts,
     };
   }
 
@@ -295,27 +377,6 @@ export class ProductService {
         }
 
         product.discountTagsIds = dto.discountTagsIds.join(", ");
-        const discounts = await entityManager.find(Discounts, {
-          where: {
-            discountId: In(dto.discountTagsIds),
-          },
-        });
-        if (discounts.length > 0) {
-          const bestDiscount = discounts
-            .map((discount) => {
-              const discountAmount =
-                discount.type === "PERCENT"
-                  ? (Number(discount.value ?? 0) / 100) * Number(dto.price ?? 0)
-                  : discount.value;
-              return { ...discount, discountAmount };
-            })
-            .reduce((max, current) =>
-              current.discountAmount > max.discountAmount ? current : max
-            );
-          product.discountPrice = bestDiscount.toString();
-        } else {
-          product.discountPrice = dto.price;
-        }
         product = await entityManager.save(Product, product);
         product.sku = `P${generateIndentityCode(product.productId)}`;
         product = await entityManager.save(Product, product);
@@ -430,31 +491,6 @@ export class ProductService {
         }
 
         product.discountTagsIds = dto.discountTagsIds.join(", ");
-        const discounts = await entityManager.find(Discounts, {
-          where: {
-            discountId: In(dto.discountTagsIds),
-          },
-        });
-        if (discounts.length > 0) {
-          const bestDiscount = discounts
-            .map((discount) => {
-              const discountAmount =
-                discount.type === "PERCENT"
-                  ? (Number(discount.value ?? 0) / 100) * Number(dto.price ?? 0)
-                  : discount.value;
-              return { ...discount, discountAmount };
-            })
-            .reduce((max, current) =>
-              current.discountAmount > max.discountAmount ? current : max
-            );
-          product.discountPrice = (
-            Number(dto.price ?? 0) >= Number(bestDiscount.discountAmount)
-              ? Number(dto.price ?? 0) - Number(bestDiscount.discountAmount)
-              : dto.price
-          ).toString();
-        } else {
-          product.discountPrice = dto.price;
-        }
         product = await entityManager.save(Product, product);
         product = await entityManager.findOne(Product, {
           where: {
@@ -549,63 +585,6 @@ export class ProductService {
           }
         }
         return product;
-      } catch (ex) {
-        if (ex.message.includes("duplicate")) {
-          throw Error(PRODUCT_ERROR_DUPLICATE);
-        } else {
-          throw ex;
-        }
-      }
-    });
-  }
-
-  async batchUpdateDiscountPrice(skuIds: string) {
-    return await this.productRepo.manager.transaction(async (entityManager) => {
-      try {
-        const products = await entityManager.find(Product, {
-          where: {
-            sku: In(skuIds.split(", ")),
-            active: true,
-          },
-        });
-
-        for (let product of products) {
-          const discounts = await entityManager.find(Discounts, {
-            where: {
-              discountId: In(product.discountTagsIds.split(",")),
-            },
-          });
-          if (discounts) {
-            const bestDiscount = discounts
-              .map((discount) => {
-                const discountAmount =
-                  discount.type === "PERCENT"
-                    ? (Number(discount.value ?? 0) / 100) *
-                      Number(product.price ?? 0)
-                    : discount.value;
-                return { ...discount, discountAmount };
-              })
-              .reduce((max, current) =>
-                current.discountAmount > max.discountAmount ? current : max
-              );
-            product.discountPrice = (
-              Number(product.price ?? 0) >= Number(bestDiscount.discountAmount)
-                ? Number(product.price ?? 0) -
-                  Number(bestDiscount.discountAmount)
-                : product.price
-            ).toString();
-          } else {
-            product.discountPrice = product.price;
-          }
-          product = await entityManager.save(Product, product);
-        }
-
-        return await entityManager.find(Product, {
-          where: {
-            sku: In(skuIds.split(", ")),
-            active: true,
-          },
-        });
       } catch (ex) {
         if (ex.message.includes("duplicate")) {
           throw Error(PRODUCT_ERROR_DUPLICATE);

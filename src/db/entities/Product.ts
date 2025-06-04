@@ -35,9 +35,6 @@ export class Product {
   @Column("numeric", { name: "Price", default: () => "0" })
   price: string;
 
-  @Column("numeric", { name: "DiscountPrice", default: () => "0" })
-  discountPrice: string;
-
   @Column("numeric", { name: "Size", default: () => "0" })
   size: string;
 

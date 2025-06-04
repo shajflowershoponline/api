@@ -41,8 +41,24 @@ export class ProductController {
       return res;
     }
   }
-
+  
   @Post("/page")
+  //   @UseGuards(JwtAuthGuard)
+  async getPagination(@Body() paginationParams: PaginationParamsDto) {
+    const res: ApiResponseModel<{ results: Product[]; total: number }> =
+      {} as any;
+    try {
+      res.data = await this.productService.getPagination(paginationParams);
+      res.success = true;
+      return res;
+    } catch (e) {
+      res.success = false;
+      res.message = e.message !== undefined ? e.message : e;
+      return res;
+    }
+  }
+
+  @Post("/client-pagination")
   @ApiBody({
     schema: {
       type: "object",
@@ -69,7 +85,7 @@ export class ProductController {
     },
   })
   //   @UseGuards(JwtAuthGuard)
-  async getPagination(
+  async getClientPagination(
     @Body()
     params: {
       pageSize: string;
@@ -86,7 +102,7 @@ export class ProductController {
     const res: ApiResponseModel<{ results: Product[]; total: number }> =
       {} as any;
     try {
-      res.data = await this.productService.getPagination(params);
+      res.data = await this.productService.getClientPagination(params);
       res.success = true;
       return res;
     } catch (e) {
@@ -153,31 +169,6 @@ export class ProductController {
       res.data = await this.productService.create(accessDto);
       res.success = true;
       res.message = `Product ${SAVING_SUCCESS}`;
-      return res;
-    } catch (e) {
-      res.success = false;
-      res.message = e.message !== undefined ? e.message : e;
-      return res;
-    }
-  }
-
-  @Post("batch-update-discount-price")
-  @ApiBody({
-    schema: {
-      type: "object",
-      properties: {
-        skus: { type: "string" },
-      },
-      required: ["skus"],
-    },
-  })
-  //   @UseGuards(JwtAuthGuard)
-  async batchUpdateDiscountPrice(@Body() dto: { skus: string }) {
-    const res: ApiResponseModel<Product[]> = {} as any;
-    try {
-      res.data = await this.productService.batchUpdateDiscountPrice(dto.skus);
-      res.success = true;
-      res.message = `Product ${UPDATE_SUCCESS}`;
       return res;
     } catch (e) {
       res.success = false;
