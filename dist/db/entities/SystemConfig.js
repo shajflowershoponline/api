@@ -18,11 +18,11 @@ __decorate([
     __metadata("design:type", String)
 ], SystemConfig.prototype, "key", void 0);
 __decorate([
-    (0, typeorm_1.Column)("character varying", { primary: true, name: "Value" }),
+    (0, typeorm_1.Column)("character varying", { name: "Value" }),
     __metadata("design:type", String)
 ], SystemConfig.prototype, "value", void 0);
 SystemConfig = __decorate([
-    (0, typeorm_1.Index)("SystemConfig_pkey", ["key", "value"], { unique: true }),
+    (0, typeorm_1.Index)("SystemConfig_pkey", ["key"], { unique: true }),
     (0, typeorm_1.Entity)("SystemConfig", { schema: "dbo" })
 ], SystemConfig);
 exports.SystemConfig = SystemConfig;

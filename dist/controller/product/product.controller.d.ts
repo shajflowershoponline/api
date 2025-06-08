@@ -9,6 +9,7 @@ import { Collection } from "src/db/entities/Collection";
 export declare class ProductController {
     private readonly productService;
     constructor(productService: ProductService);
+    getAllFeaturedProducts(customerUserId: string): Promise<ApiResponseModel<Product[]>>;
     getDetails(sku: string): Promise<ApiResponseModel<Product>>;
     getPagination(paginationParams: PaginationParamsDto): Promise<ApiResponseModel<{
         results: Product[];

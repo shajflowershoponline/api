@@ -27,6 +27,25 @@ import { Collection } from "src/db/entities/Collection";
 export class ProductController {
   constructor(private readonly productService: ProductService) {}
 
+  @Get("/featured/:customerUserId")
+  //   @UseGuards(JwtAuthGuard)
+  async getAllFeaturedProducts(
+    @Param("customerUserId") customerUserId: string
+  ) {
+    const res = {} as ApiResponseModel<Product[]>;
+    try {
+      res.data = await this.productService.getAllFeaturedProducts(
+        customerUserId
+      );
+      res.success = true;
+      return res;
+    } catch (e) {
+      res.success = false;
+      res.message = e.message !== undefined ? e.message : e;
+      return res;
+    }
+  }
+
   @Get("/:sku")
   //   @UseGuards(JwtAuthGuard)
   async getDetails(@Param("sku") sku: string) {
@@ -41,7 +60,7 @@ export class ProductController {
       return res;
     }
   }
-  
+
   @Post("/page")
   //   @UseGuards(JwtAuthGuard)
   async getPagination(@Body() paginationParams: PaginationParamsDto) {
@@ -98,7 +117,8 @@ export class ProductController {
         name: string;
         type?: string;
       }[];
-    }) {
+    }
+  ) {
     const res: ApiResponseModel<{ results: Product[]; total: number }> =
       {} as any;
     try {

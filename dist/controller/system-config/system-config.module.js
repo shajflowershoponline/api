@@ -12,11 +12,12 @@ const system_config_controller_1 = require("./system-config.controller");
 const SystemConfig_1 = require("../../db/entities/SystemConfig");
 const typeorm_1 = require("@nestjs/typeorm");
 const system_config_service_1 = require("../../services/system-config.service");
+const firebase_provider_module_1 = require("../../core/provider/firebase/firebase-provider.module");
 let SystemConfigModule = class SystemConfigModule {
 };
 SystemConfigModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([SystemConfig_1.SystemConfig])],
+        imports: [firebase_provider_module_1.FirebaseProviderModule, typeorm_1.TypeOrmModule.forFeature([SystemConfig_1.SystemConfig])],
         controllers: [system_config_controller_1.SystemConfigController],
         providers: [system_config_service_1.SystemConfigService],
         exports: [system_config_service_1.SystemConfigService],

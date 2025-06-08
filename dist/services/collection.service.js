@@ -149,6 +149,7 @@ let CollectionService = class CollectionService {
                 collection.isSale = dto.isSale;
                 collection.saleFromDate = dto.saleFromDate;
                 collection.saleDueDate = dto.saleDueDate;
+                collection.isFeatured = dto.isFeatured;
                 if (dto.isSale) {
                     const existingDiscounts = await entityManager.find(Discounts_1.Discounts, {
                         where: {
@@ -243,6 +244,7 @@ let CollectionService = class CollectionService {
                 collection.isSale = dto.isSale;
                 collection.saleFromDate = dto.saleFromDate;
                 collection.saleDueDate = dto.saleDueDate;
+                collection.isFeatured = dto.isFeatured;
                 if (dto.isSale) {
                     const existingDiscounts = await entityManager.find(Discounts_1.Discounts, {
                         where: {
@@ -394,6 +396,21 @@ let CollectionService = class CollectionService {
                 throw Error(collection_constant_1.COLLECTION_ERROR_NOT_FOUND);
             }
             collection.active = false;
+            return await entityManager.save(Collection_1.Collection, collection);
+        });
+    }
+    async updateFeatured(collectionId, isFeatured) {
+        return await this.collectionRepo.manager.transaction(async (entityManager) => {
+            const collection = await entityManager.findOne(Collection_1.Collection, {
+                where: {
+                    collectionId,
+                    active: true,
+                },
+            });
+            if (!collection) {
+                throw Error(collection_constant_1.COLLECTION_ERROR_NOT_FOUND);
+            }
+            collection.isFeatured = isFeatured;
             return await entityManager.save(Collection_1.Collection, collection);
         });
     }

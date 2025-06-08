@@ -46,6 +46,13 @@ export class Collection {
   @Column("character varying", { name: "DiscountTagsIds", nullable: true })
   discountTagsIds: string | null;
 
+  @Column("boolean", {
+    name: "IsFeatured",
+    nullable: true,
+    default: () => "false",
+  })
+  isFeatured: boolean | null;
+
   @ManyToOne(() => File, (file) => file.collections)
   @JoinColumn([{ name: "ThumbnailFileId", referencedColumnName: "fileId" }])
   thumbnailFile: File;

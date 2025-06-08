@@ -17,12 +17,14 @@ const axios_1 = require("@nestjs/axios");
 const delivery_service_1 = require("../../services/delivery.service");
 const system_config_service_1 = require("../../services/system-config.service");
 const SystemConfig_1 = require("../../db/entities/SystemConfig");
+const firebase_provider_module_1 = require("../../core/provider/firebase/firebase-provider.module");
 let OrderModule = class OrderModule {
 };
 OrderModule = __decorate([
     (0, common_1.Module)({
         imports: [
             axios_1.HttpModule,
+            firebase_provider_module_1.FirebaseProviderModule,
             typeorm_1.TypeOrmModule.forFeature([Order_1.Order, OrderItems_1.OrderItems, SystemConfig_1.SystemConfig]),
         ],
         controllers: [order_controller_1.OrderController],

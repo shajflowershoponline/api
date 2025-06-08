@@ -5,4 +5,8 @@ export declare class SystemConfigController {
     private readonly systemConfigService;
     constructor(systemConfigService: SystemConfigService);
     getAll(): Promise<ApiResponseModel<SystemConfig[]>>;
+    save(dto: {
+        key: string;
+        value: string;
+    }): Promise<ApiResponseModel<SystemConfig[]>>;
 }

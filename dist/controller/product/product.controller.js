@@ -24,6 +24,19 @@ let ProductController = class ProductController {
     constructor(productService) {
         this.productService = productService;
     }
+    async getAllFeaturedProducts(customerUserId) {
+        const res = {};
+        try {
+            res.data = await this.productService.getAllFeaturedProducts(customerUserId);
+            res.success = true;
+            return res;
+        }
+        catch (e) {
+            res.success = false;
+            res.message = e.message !== undefined ? e.message : e;
+            return res;
+        }
+    }
     async getDetails(sku) {
         const res = {};
         try {
@@ -119,6 +132,13 @@ let ProductController = class ProductController {
         }
     }
 };
+__decorate([
+    (0, common_1.Get)("/featured/:customerUserId"),
+    __param(0, (0, common_1.Param)("customerUserId")),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ProductController.prototype, "getAllFeaturedProducts", null);
 __decorate([
     (0, common_1.Get)("/:sku"),
     __param(0, (0, common_1.Param)("sku")),

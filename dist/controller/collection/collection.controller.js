@@ -91,6 +91,20 @@ let CollectionController = class CollectionController {
             return res;
         }
     }
+    async updateFeatured(collectionId, dto = { isFeatured: false }) {
+        const res = {};
+        try {
+            res.data = await this.collectionService.updateFeatured(collectionId, dto.isFeatured);
+            res.success = true;
+            res.message = `Collection ${api_response_constant_1.UPDATE_SUCCESS}`;
+            return res;
+        }
+        catch (e) {
+            res.success = false;
+            res.message = e.message !== undefined ? e.message : e;
+            return res;
+        }
+    }
     async delete(collectionId) {
         const res = {};
         try {
@@ -154,6 +168,23 @@ __decorate([
     __metadata("design:paramtypes", [String, collection_update_dto_1.UpdateCollectionDto]),
     __metadata("design:returntype", Promise)
 ], CollectionController.prototype, "update", null);
+__decorate([
+    (0, common_1.Put)("updateFeatured/:collectionId"),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: "object",
+            properties: {
+                isFeatured: { type: "booelan", example: false },
+            },
+            required: ["isFeatured"],
+        },
+    }),
+    __param(0, (0, common_1.Param)("collectionId")),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], CollectionController.prototype, "updateFeatured", null);
 __decorate([
     (0, common_1.Delete)("/:collectionId"),
     __param(0, (0, common_1.Param)("collectionId")),

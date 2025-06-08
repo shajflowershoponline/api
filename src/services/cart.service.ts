@@ -11,6 +11,7 @@ import { CartCustomerCouponDto } from "src/core/dto/cart-item/cart-customer-coup
 import { CreateCartItemDto } from "src/core/dto/cart-item/cart-item.create.dto";
 import { UpdateCartDto } from "src/core/dto/cart-item/cart-item.update.dto";
 import { CartItems } from "src/db/entities/CartItems";
+import { Collection } from "src/db/entities/Collection";
 import { CustomerCoupon } from "src/db/entities/CustomerCoupon";
 import { CustomerUser } from "src/db/entities/CustomerUser";
 import { Discounts } from "src/db/entities/Discounts";
@@ -25,22 +26,91 @@ export class CartService {
   ) {}
 
   async getItems(customerUserId) {
-    const results = await this.cartItemsRepo.find({
-      where: {
-        customerUser: {
-          customerUserId,
+    const [results, activeCoupon, collections] = await Promise.all([
+      this.cartItemsRepo.find({
+        where: {
+          customerUser: {
+            customerUserId,
+          },
+          active: true,
         },
-        active: true,
-      },
-      relations: {
-        product: {
-          productImages: {
-            file: true,
+        relations: {
+          product: {
+            productImages: {
+              file: true,
+            },
           },
         },
-      },
-    });
-    return results;
+      }),
+      this.cartItemsRepo.manager.findOne(CustomerCoupon, {
+        where: {
+          customerUser: {
+            customerUserId,
+          },
+          discount: {
+            active: true,
+          },
+          active: true,
+        },
+        relations: {
+          customerUser: true,
+          discount: true,
+        },
+      }),
+      this.cartItemsRepo.manager.find(Collection, {
+        where: {
+          productCollections: {
+            product: {
+              cartItems: {
+                customerUser: {
+                  customerUserId,
+                },
+              },
+            },
+            active: true,
+          },
+          isSale: true,
+          active: true,
+        },
+        relations: {
+          productCollections: {
+            product: true,
+          },
+        },
+      }),
+    ]);
+    return {
+      results: results.map((i) => {
+        const discountTagsIds = [
+          i.product.discountTagsIds,
+          ...collections
+            ?.filter((c) =>
+              c.productCollections?.find(
+                (pc) => pc.product?.productId === i.product?.productId
+              )
+            )
+            .map((c) => c.discountTagsIds),
+        ];
+        i.product.discountTagsIds = Array.from(new Set(discountTagsIds)).join(
+          ", "
+        );
+        if (discountTagsIds.includes(activeCoupon?.discount?.discountId)) {
+          const discountAmount =
+            activeCoupon?.discount?.type === "PERCENTAGE"
+              ? (parseFloat(activeCoupon?.discount?.value) / 100) *
+                Number(i.product?.price ?? 0)
+              : parseFloat(activeCoupon?.discount?.value);
+          i.product["discountPrice"] =
+            Number(i.product?.price ?? 0) - discountAmount;
+          i["appliedDiscount"] = true;
+        } else {
+          i.product["discountPrice"] = Number(i.product?.price ?? 0);
+        }
+        return i;
+      }),
+      activeCoupon,
+      collections,
+    };
   }
 
   async create(dto: CreateCartItemDto) {
@@ -195,8 +265,10 @@ export class CartService {
           const cartItems = await entityManager
             .createQueryBuilder(CartItems, "cartItem")
             .innerJoin("cartItem.product", "product")
+            .innerJoin("product.productCollections", "productCollections")
+            .innerJoin("productCollections.collection", "collection")
             .where(
-              `(',' || product."DiscountTagsIds" || ',') LIKE :discountid`,
+              `(',' || product."DiscountTagsIds" || ',') LIKE :discountid OR (',' || collection."DiscountTagsIds" || ',') LIKE :discountid`,
               {
                 discountid: `%,${discount.discountId},%`,
               }
@@ -214,15 +286,19 @@ export class CartService {
               customerUser: {
                 customerUserId: dto.customerUserId,
               },
-              discount: {
-                promoCode: dto.promoCode,
-              },
+              active: true,
             },
             relations: {
               discount: true,
             },
           });
-          if (!customerCoupon) {
+          if (
+            customerCoupon &&
+            customerCoupon?.discount.discountId !== discount.discountId
+          ) {
+            customerCoupon;
+            customerCoupon.discount = discount;
+          } else {
             customerCoupon = new CustomerCoupon();
             customerCoupon.customerUser = customerUser;
             customerCoupon.discount = discount;
@@ -246,7 +322,7 @@ export class CartService {
             },
           });
         } else {
-          let customerCoupon = await entityManager.findOne(CustomerCoupon, {
+          let customerCoupons = await entityManager.find(CustomerCoupon, {
             where: {
               customerUser: {
                 customerUserId: dto.customerUserId,
@@ -258,16 +334,15 @@ export class CartService {
             },
           });
 
-          if (!customerCoupon) {
-            customerCoupon = new CustomerCoupon();
-            customerCoupon.customerUser = customerUser;
-          } else {
-            customerCoupon.discount = null;
+          if (customerCoupons.length > 0) {
+            customerCoupons.forEach((res) => {
+              res.active = false;
+            });
+            customerCoupons = await entityManager.save(
+              CustomerCoupon,
+              customerCoupons
+            );
           }
-          customerCoupon = await entityManager.save(
-            CustomerCoupon,
-            customerCoupon
-          );
           return await entityManager.findOne(CustomerCoupon, {
             where: {
               customerUser: {

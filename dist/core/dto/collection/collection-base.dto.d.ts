@@ -8,4 +8,5 @@ export declare class DefaultCollectionDto {
     saleDueDate: Date;
     productIds: string[];
     discountTagsIds: string[];
+    isFeatured: boolean;
 }

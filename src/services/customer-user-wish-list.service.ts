@@ -147,9 +147,6 @@ export class CustomerUserWishListService {
         },
       },
     });
-    if (!result) {
-      throw Error(CUSTOMERUSERWISHLIST_ERROR_NOT_FOUND);
-    }
     return result;
   }
 

@@ -26,6 +26,7 @@ const delivery_service_1 = require("./delivery.service");
 const config_1 = require("@nestjs/config");
 const CustomerCoupon_1 = require("../db/entities/CustomerCoupon");
 const order_update_dto_1 = require("../core/dto/order/order.update.dto");
+const Collection_1 = require("../db/entities/Collection");
 let OrderService = class OrderService {
     constructor(orderRepo, deliveryService, config) {
         this.orderRepo = orderRepo;
@@ -151,8 +152,22 @@ let OrderService = class OrderService {
                 order.deliveryAddress =
                     await this.deliveryService.getAddressNameFromCoordinates(dto.deliveryAddressCoordinates.lat, dto.deliveryAddressCoordinates.lng);
                 order.deliveryAddressCoordinates = dto.deliveryAddressCoordinates;
+                order.specialInstructions = dto.specialInstructions || null;
+                order.notesToRider = dto.notesToRider || null;
+                order = await entityManager.save(Order_1.Order, order);
                 let subtotal = 0;
                 let cartItems = [];
+                let netDiscountAmount = 0;
+                const currentDiscount = await entityManager.findOne(CustomerCoupon_1.CustomerCoupon, {
+                    where: {
+                        customerUser: {
+                            customerUserId: dto.customerUserId,
+                        },
+                    },
+                    relations: {
+                        discount: true,
+                    },
+                });
                 if (dto.cartItemIds && dto.cartItemIds.length > 0) {
                     cartItems = await entityManager.find(CartItems_1.CartItems, {
                         where: {
@@ -175,56 +190,63 @@ let OrderService = class OrderService {
                         const quantity = parseFloat(item.quantity || "1");
                         return sum + quantity * price;
                     }, 0);
+                    const collections = await entityManager.find(Collection_1.Collection, {
+                        where: {
+                            productCollections: {
+                                product: {
+                                    productId: (0, typeorm_2.In)(dto.cartItemIds.map((id) => Number(id))),
+                                },
+                                active: true,
+                            },
+                            isSale: true,
+                            active: true,
+                        },
+                        relations: {
+                            productCollections: {
+                                product: true,
+                            },
+                        },
+                    });
+                    const orderItems = [];
+                    for (const cartItem of cartItems) {
+                        const orderItem = new OrderItems_1.OrderItems();
+                        orderItem.product = cartItem.product;
+                        orderItem.order = order;
+                        orderItem.quantity = cartItem.quantity;
+                        orderItem.price = cartItem.price;
+                        const itemTotalAmount = Number((_a = cartItem.price) !== null && _a !== void 0 ? _a : 0) *
+                            Number(Number((_b = cartItem.quantity) !== null && _b !== void 0 ? _b : 0));
+                        const discountTagsIds = [
+                            cartItem.product.discountTagsIds,
+                            ...collections === null || collections === void 0 ? void 0 : collections.filter((c) => {
+                                var _a;
+                                return (_a = c.productCollections) === null || _a === void 0 ? void 0 : _a.find((pc) => { var _a, _b; return ((_a = pc.product) === null || _a === void 0 ? void 0 : _a.productId) === ((_b = cartItem.product) === null || _b === void 0 ? void 0 : _b.productId); });
+                            }).map((c) => c.discountTagsIds),
+                        ];
+                        if (discountTagsIds.includes((_c = currentDiscount === null || currentDiscount === void 0 ? void 0 : currentDiscount.discount) === null || _c === void 0 ? void 0 : _c.discountId)) {
+                            const discountAmount = ((_d = currentDiscount === null || currentDiscount === void 0 ? void 0 : currentDiscount.discount) === null || _d === void 0 ? void 0 : _d.type) === "PERCENTAGE"
+                                ? (parseFloat((_e = currentDiscount === null || currentDiscount === void 0 ? void 0 : currentDiscount.discount) === null || _e === void 0 ? void 0 : _e.value) / 100) *
+                                    itemTotalAmount
+                                : parseFloat((_f = currentDiscount === null || currentDiscount === void 0 ? void 0 : currentDiscount.discount) === null || _f === void 0 ? void 0 : _f.value);
+                            orderItem.totalAmount = (itemTotalAmount - discountAmount).toString();
+                            netDiscountAmount =
+                                netDiscountAmount + Number(orderItem.totalAmount);
+                        }
+                        else {
+                            orderItem.totalAmount = itemTotalAmount.toString();
+                        }
+                        orderItems.push(orderItem);
+                        cartItem.active = false;
+                        cartItem.updatedAt = await (0, utils_1.getDate)();
+                    }
+                    await entityManager.save(OrderItems_1.OrderItems, orderItems);
+                    await entityManager.save(CartItems_1.CartItems, cartItems);
                 }
                 order.subtotal = subtotal.toString();
-                let discountAmount = 0;
-                const currentDiscount = await entityManager.findOne(CustomerCoupon_1.CustomerCoupon, {
-                    where: {
-                        customerUser: {
-                            customerUserId: dto.customerUserId,
-                        },
-                    },
-                    relations: {
-                        discount: true,
-                    },
-                });
-                if (currentDiscount && (currentDiscount === null || currentDiscount === void 0 ? void 0 : currentDiscount.discount)) {
-                    order.promoCode = (_a = currentDiscount.discount) === null || _a === void 0 ? void 0 : _a.promoCode;
-                    if (!(currentDiscount === null || currentDiscount === void 0 ? void 0 : currentDiscount.discount)) {
-                        throw Error(order_constant_1.ORDER_ERROR_NOT_FOUND);
-                    }
-                    const discountValue = parseFloat((_b = currentDiscount === null || currentDiscount === void 0 ? void 0 : currentDiscount.discount) === null || _b === void 0 ? void 0 : _b.value);
-                    if (((_c = currentDiscount === null || currentDiscount === void 0 ? void 0 : currentDiscount.discount) === null || _c === void 0 ? void 0 : _c.type) === "AMOUNT") {
-                        discountAmount = discountValue;
-                    }
-                    if (((_d = currentDiscount === null || currentDiscount === void 0 ? void 0 : currentDiscount.discount) === null || _d === void 0 ? void 0 : _d.type) === "PERCENTAGE") {
-                        discountAmount = (subtotal * discountValue) / 100;
-                    }
-                }
-                order.discount = discountAmount.toString();
+                order.discount = (subtotal - netDiscountAmount).toString();
                 const delivery = await this.deliveryService.calculateDeliveryFee(this.STORE_LOCATION_COORDINATES, dto.deliveryAddressCoordinates);
                 order.deliveryFee = delivery.deliveryFee.toString();
-                order.total = (Number(order.subtotal) -
-                    discountAmount +
-                    delivery.deliveryFee).toString();
-                order.specialInstructions = dto.specialInstructions || null;
-                order.notesToRider = dto.notesToRider || null;
-                order = await entityManager.save(Order_1.Order, order);
-                const orderItems = [];
-                for (const cartItem of cartItems) {
-                    const orderItem = new OrderItems_1.OrderItems();
-                    orderItem.product = cartItem.product;
-                    orderItem.order = order;
-                    orderItem.quantity = cartItem.quantity;
-                    orderItem.price = cartItem.price;
-                    const totalAmount = Number((_e = cartItem.quantity) !== null && _e !== void 0 ? _e : 0) * Number((_f = cartItem.price) !== null && _f !== void 0 ? _f : 0);
-                    orderItem.totalAmount = totalAmount.toString();
-                    orderItems.push(orderItem);
-                    cartItem.active = false;
-                    cartItem.updatedAt = await (0, utils_1.getDate)();
-                }
-                await entityManager.save(OrderItems_1.OrderItems, orderItems);
-                await entityManager.save(CartItems_1.CartItems, cartItems);
+                order.total = (netDiscountAmount + delivery.deliveryFee).toString();
                 order.orderCode = (0, utils_1.generateIndentityCode)(order.orderId);
                 order = await entityManager.save(Order_1.Order, order);
                 order = await entityManager.findOne(Order_1.Order, {

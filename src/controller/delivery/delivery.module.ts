@@ -5,9 +5,14 @@ import { HttpModule } from "@nestjs/axios";
 import { SystemConfigService } from "src/services/system-config.service";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { SystemConfig } from "src/db/entities/SystemConfig";
+import { FirebaseProviderModule } from "src/core/provider/firebase/firebase-provider.module";
 
 @Module({
-  imports: [HttpModule, TypeOrmModule.forFeature([SystemConfig])],
+  imports: [
+    HttpModule,
+    FirebaseProviderModule,
+    TypeOrmModule.forFeature([SystemConfig]),
+  ],
   controllers: [DeliveryController],
   providers: [DeliveryService, SystemConfigService],
   exports: [DeliveryService],

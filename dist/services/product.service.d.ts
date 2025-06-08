@@ -67,6 +67,7 @@ export declare class ProductService {
         productCollections: ProductCollection[];
         productImages: ProductImage[];
     }>;
+    getAllFeaturedProducts(customerUserId: any): Promise<Product[]>;
     create(dto: CreateProductDto): Promise<Product>;
     update(sku: any, dto: UpdateProductDto): Promise<Product>;
     delete(sku: any): Promise<Product>;

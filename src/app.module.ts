@@ -19,16 +19,16 @@ import { AIModule } from "./controller/ai/ai.module";
 import { GiftAddOnsModule } from "./controller/gift-add-ons/gift-add-ons.module";
 import { DiscountsModule } from "./controller/discounts/discounts.module";
 import { CartModule } from "./controller/cart/cart.module";
-import { OrderService } from './services/order.service';
-import { OrderModule } from './controller/order/order.module';
-import { DeliveryService } from './services/delivery.service';
-import { SystemConfigService } from './services/system-config.service';
-import { SystemConfigModule } from './controller/system-config/system-config.module';
-import { GeolocationModule } from './controller/geolocation/geolocation.module';
-import { GeolocationService } from './services/geolocation.service';
-import { DeliveryModule } from './controller/delivery/delivery.module';
-import { CustomerUserWishListService } from './services/customer-user-wish-list.service';
-import { CustomerUserWishListModule } from './controller/customer-user-wish-list/customer-user-wish-list.module';
+import { OrderService } from "./services/order.service";
+import { OrderModule } from "./controller/order/order.module";
+import { DeliveryService } from "./services/delivery.service";
+import { SystemConfigService } from "./services/system-config.service";
+import { SystemConfigModule } from "./controller/system-config/system-config.module";
+import { GeolocationModule } from "./controller/geolocation/geolocation.module";
+import { GeolocationService } from "./services/geolocation.service";
+import { DeliveryModule } from "./controller/delivery/delivery.module";
+import { CustomerUserWishListService } from "./services/customer-user-wish-list.service";
+import { CustomerUserWishListModule } from "./controller/customer-user-wish-list/customer-user-wish-list.module";
 const envFilePath: string = getEnvPath(`${__dirname}/common/envs`);
 
 @Module({

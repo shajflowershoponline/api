@@ -133,9 +133,6 @@ let CustomerUserWishListService = class CustomerUserWishListService {
                 },
             },
         });
-        if (!result) {
-            throw Error(discounts_constant_copy_1.CUSTOMERUSERWISHLIST_ERROR_NOT_FOUND);
-        }
         return result;
     }
     async create(dto) {

@@ -8,10 +8,12 @@ import { HttpModule } from "@nestjs/axios";
 import { DeliveryService } from "src/services/delivery.service";
 import { SystemConfigService } from "src/services/system-config.service";
 import { SystemConfig } from "src/db/entities/SystemConfig";
+import { FirebaseProviderModule } from "src/core/provider/firebase/firebase-provider.module";
 
 @Module({
   imports: [
     HttpModule,
+    FirebaseProviderModule,
     TypeOrmModule.forFeature([Order, OrderItems, SystemConfig]),
   ],
   controllers: [OrderController],

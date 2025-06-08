@@ -32,6 +32,7 @@ export declare class CollectionService {
         saleDueDate: Date;
         active: boolean;
         discountTagsIds: string;
+        isFeatured: boolean;
         thumbnailFile: File;
         productCollections: ProductCollection[];
     }>;
@@ -39,4 +40,5 @@ export declare class CollectionService {
     update(collectionId: any, dto: UpdateCollectionDto): Promise<Collection>;
     updateOrder(dtos: UpdateCollectionOrderDto[]): Promise<Collection[]>;
     delete(collectionId: any): Promise<Collection>;
+    updateFeatured(collectionId: any, isFeatured: any): Promise<Collection>;
 }

@@ -129,6 +129,37 @@ export class CollectionController {
     }
   }
 
+  @Put("updateFeatured/:collectionId")
+  //   @UseGuards(JwtAuthGuard)
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: {
+        isFeatured: { type: "booelan", example: false },
+      },
+      required: ["isFeatured" ],
+    },
+  })
+  async updateFeatured(
+    @Param("collectionId") collectionId: string,
+    @Body() dto: { isFeatured: boolean } = { isFeatured: false }
+  ) {
+    const res: ApiResponseModel<Collection> = {} as any;
+    try {
+      res.data = await this.collectionService.updateFeatured(
+        collectionId,
+        dto.isFeatured
+      );
+      res.success = true;
+      res.message = `Collection ${UPDATE_SUCCESS}`;
+      return res;
+    } catch (e) {
+      res.success = false;
+      res.message = e.message !== undefined ? e.message : e;
+      return res;
+    }
+  }
+
   @Delete("/:collectionId")
   //   @UseGuards(JwtAuthGuard)
   async delete(@Param("collectionId") collectionId: string) {

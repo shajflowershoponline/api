@@ -19,6 +19,7 @@ class DefaultCollectionDto {
         this.isSale = false;
         this.productIds = [];
         this.discountTagsIds = [];
+        this.isFeatured = false;
     }
 }
 __decorate([
@@ -77,5 +78,11 @@ __decorate([
     (0, class_validator_1.IsArray)(),
     __metadata("design:type", Array)
 ], DefaultCollectionDto.prototype, "discountTagsIds", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Object)
+], DefaultCollectionDto.prototype, "isFeatured", void 0);
 exports.DefaultCollectionDto = DefaultCollectionDto;
 //# sourceMappingURL=collection-base.dto.js.map

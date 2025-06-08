@@ -55,7 +55,7 @@ export class Order {
   @Column("numeric", { name: "Discount", default: () => "0" })
   discount: string;
 
-  @Column("numeric", { name: "Total" })
+  @Column("numeric", { name: "Total", default: () => "0" })
   total: string;
 
   @Column("character varying", { name: "SpecialInstructions", nullable: true })

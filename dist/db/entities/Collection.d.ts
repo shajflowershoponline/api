@@ -10,6 +10,7 @@ export declare class Collection {
     saleDueDate: Date | null;
     active: boolean | null;
     discountTagsIds: string | null;
+    isFeatured: boolean | null;
     thumbnailFile: File;
     productCollections: ProductCollection[];
 }

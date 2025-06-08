@@ -58,6 +58,14 @@ __decorate([
     __metadata("design:type", String)
 ], Collection.prototype, "discountTagsIds", void 0);
 __decorate([
+    (0, typeorm_1.Column)("boolean", {
+        name: "IsFeatured",
+        nullable: true,
+        default: () => "false",
+    }),
+    __metadata("design:type", Boolean)
+], Collection.prototype, "isFeatured", void 0);
+__decorate([
     (0, typeorm_1.ManyToOne)(() => File_1.File, (file) => file.collections),
     (0, typeorm_1.JoinColumn)([{ name: "ThumbnailFileId", referencedColumnName: "fileId" }]),
     __metadata("design:type", File_1.File)

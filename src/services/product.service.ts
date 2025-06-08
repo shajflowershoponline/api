@@ -114,7 +114,7 @@ export class ProductService {
                     p.discountTagsIds.split(",").includes(d.discountId)
                   )
                   .map((d) =>
-                    d.type === "PERCENT"
+                    d.type === "PERCENTAGE"
                       ? (parseFloat(d.value) / 100) * Number(p.price ?? 0)
                       : parseFloat(d.value)
                   )
@@ -122,9 +122,11 @@ export class ProductService {
             : 0;
         p["discountPrice"] = (Number(p.price ?? 0) - maxDiscount).toString();
         p["isSale"] =
-          p.productCollections.some(
+          p.discountTagsIds?.length + p.productCollections.length > 0 &&
+          (p.productCollections.some(
             (x) => x.product?.productId === p.productId && x.collection.isSale
-          ) || (p.discountTagsIds ?? "").split(", ").length > 0;
+          ) ||
+            (p.discountTagsIds ?? "").split(", ").length > 0);
         p["iAmInterested"] = customerUserWishlist.some(
           (x) => x.product?.productId === p.productId
         );
@@ -283,31 +285,51 @@ export class ProductService {
         },
       },
     });
-    if (!result) {
-      throw Error(PRODUCT_ERROR_NOT_FOUND);
-    }
+    const collectionsDiscounts = await this.productRepo.manager.find(
+      Collection,
+      {
+        where: {
+          productCollections: {
+            product: {
+              sku,
+            },
+            active: true,
+          },
+          active: true,
+          isSale: true,
+        },
+      }
+    );
+    const collectionsDiscountTagsIds = collectionsDiscounts
+      .map((x) => x.discountTagsIds.split(", ").map((d) => Number(d)))
+      .flat();
     const selectedDiscounts = await this.productRepo.manager.find(Discounts, {
       where: {
-        discountId: In(
-          (result.discountTagsIds ?? "0").split(",").map((x) => Number(x))
-        ),
+        discountId: In([
+          ...new Set([
+            ...(result.discountTagsIds ?? "0").split(",").map((x) => Number(x)),
+            ...collectionsDiscountTagsIds,
+          ]),
+        ]),
         active: true,
       },
     });
-    const maxDiscount = Math.max(
-      ...selectedDiscounts
-        .filter(
-          (d) => result.discountTagsIds ?? "0".split(",").includes(d.discountId)
-        )
-        .map((d) =>
-          d.type === "PERCENT"
+    if (selectedDiscounts.length > 0) {
+      const maxDiscount = Math.max(
+        ...selectedDiscounts.map((d) =>
+          d.type === "PERCENTAGE"
             ? (parseFloat(d.value) / 100) * Number(result.price ?? 0)
             : parseFloat(d.value)
         )
-    );
-    result["discountPrice"] = (
-      Number(result.price ?? 0) - maxDiscount
-    ).toString();
+      );
+      result["discountPrice"] = (
+        Number(result.price ?? 0) - maxDiscount
+      ).toString();
+      result["isSale"] = true;
+    } else {
+      result["discountPrice"] = Number(result.price ?? 0);
+      result["isSale"] = false;
+    }
     return {
       ...result,
       selectedGiftAddOns: await this.productRepo.manager.find(GiftAddOns, {
@@ -320,6 +342,79 @@ export class ProductService {
       }),
       selectedDiscounts,
     };
+  }
+
+  async getAllFeaturedProducts(customerUserId) {
+    const [results, customerUserWishlist, discounts] = await Promise.all([
+      this.productRepo.find({
+        where: {
+          active: true,
+          productCollections: {
+            collection: {
+              isFeatured: true,
+              active: true,
+            },
+          },
+        },
+        relations: {
+          productCollections: {
+            collection: true,
+          },
+          productImages: {
+            file: true,
+          },
+          category: {
+            thumbnailFile: true,
+          },
+        },
+      }),
+      this.productRepo.manager.find(CustomerUserWishlist, {
+        where: {
+          customerUser: {
+            customerUserId,
+          },
+        },
+        relations: {
+          customerUser: true,
+          product: true,
+        },
+      }),
+      this.productRepo.manager.find(Discounts, {
+        where: {
+          active: true,
+        },
+      }),
+    ]);
+    return results.map((p) => {
+      const maxDiscount =
+        (p.discountTagsIds ?? "") !== ""
+          ? Math.max(
+              ...discounts
+                .filter((d) =>
+                  p.discountTagsIds.split(",").includes(d.discountId)
+                )
+                .map((d) =>
+                  d.type === "PERCENTAGE"
+                    ? (parseFloat(d.value) / 100) * Number(p.price ?? 0)
+                    : parseFloat(d.value)
+                )
+            )
+          : 0;
+      p["discountPrice"] = (Number(p.price ?? 0) - maxDiscount).toString();
+      p["isSale"] =
+        p.discountTagsIds?.length + p.productCollections.length > 0 &&
+        (p.productCollections.some(
+          (x) => x.product?.productId === p.productId && x.collection.isSale
+        ) ||
+          (p.discountTagsIds ?? "").split(", ").length > 0);
+      p["iAmInterested"] = customerUserWishlist.some(
+        (x) => x.product?.productId === p.productId
+      );
+      p["customerUserWishlist"] = customerUserWishlist.find(
+        (x) => x.product?.productId === p.productId
+      );
+      return p;
+    });
   }
 
   async create(dto: CreateProductDto) {

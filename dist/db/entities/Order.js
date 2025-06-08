@@ -71,7 +71,7 @@ __decorate([
     __metadata("design:type", String)
 ], Order.prototype, "discount", void 0);
 __decorate([
-    (0, typeorm_1.Column)("numeric", { name: "Total" }),
+    (0, typeorm_1.Column)("numeric", { name: "Total", default: () => "0" }),
     __metadata("design:type", String)
 ], Order.prototype, "total", void 0);
 __decorate([

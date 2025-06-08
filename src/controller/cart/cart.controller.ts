@@ -6,6 +6,7 @@ import { CreateCartItemDto } from "src/core/dto/cart-item/cart-item.create.dto";
 import { UpdateCartDto } from "src/core/dto/cart-item/cart-item.update.dto";
 import { ApiResponseModel } from "src/core/models/api-response.model";
 import { CartItems } from "src/db/entities/CartItems";
+import { Collection } from "src/db/entities/Collection";
 import { CustomerCoupon } from "src/db/entities/CustomerCoupon";
 import { CartService } from "src/services/cart.service";
 
@@ -17,7 +18,11 @@ export class CartController {
   @Get("/getItems/:customerUserId")
   //   @UseGuards(JwtAuthGuard)
   async getItems(@Param("customerUserId") customerUserId: string) {
-    const res = {} as ApiResponseModel<CartItems[]>;
+    const res = {} as ApiResponseModel<{
+      results: CartItems[];
+      activeCoupon: CustomerCoupon;
+      collections: Collection[];
+    }>;
     try {
       res.data = await this.cartService.getItems(customerUserId);
       res.success = true;

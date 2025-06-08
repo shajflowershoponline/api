@@ -62,4 +62,9 @@ export class DefaultCollectionDto {
   @IsOptional()
   @IsArray()
   discountTagsIds: string[] = [];
+
+  @ApiProperty()
+  @IsOptional()
+  @IsBoolean()
+  isFeatured = false;
 }

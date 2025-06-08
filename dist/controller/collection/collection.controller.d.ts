@@ -20,5 +20,8 @@ export declare class CollectionController {
     create(accessDto: CreateCollectionDto): Promise<ApiResponseModel<Collection>>;
     updateOrder(dto: UpdateCollectionOrderDto[]): Promise<ApiResponseModel<Collection[]>>;
     update(collectionId: string, dto: UpdateCollectionDto): Promise<ApiResponseModel<Collection>>;
+    updateFeatured(collectionId: string, dto?: {
+        isFeatured: boolean;
+    }): Promise<ApiResponseModel<Collection>>;
     delete(collectionId: string): Promise<ApiResponseModel<Collection>>;
 }
