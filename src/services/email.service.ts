@@ -100,4 +100,50 @@ export class EmailService {
       throw ex;
     }
   }
+
+  async sendEmailFromContact(dto: {
+    name: string;
+    email: string;
+    subject: string;
+    message: string;
+  }) {
+    try {
+      const evEmail = this.config.get<string>("EV_EMAIL"); //shajflowershoponline@gmail.com
+      const evPass = this.config.get<string>("EV_PASS"); //key
+      const evTempPath = "../assets/email-form-confirmation.html";
+      const evCompany = this.config.get<string>("EV_COMPANY");
+      const transporter = nodemailer.createTransport({
+        service: "gmail", // Use 'gmail' for Google's SMTP
+        auth: {
+          user: evEmail, // Replace with your Gmail address
+          pass: evPass.toString().trim(), // Replace with your Gmail App Password
+        },
+      });
+      let emailTemplate = await readFile(
+        path.join(__dirname, evTempPath),
+        "utf-8"
+      );
+      emailTemplate = emailTemplate.replace("{{_NAME_}}", dto.name);
+      emailTemplate = emailTemplate.replace("{{_EMAIL_}}", dto.email);
+      emailTemplate = emailTemplate.replace("{{_SUBJECT_}}", dto.subject);
+      emailTemplate = emailTemplate.replace("{{_MESSAGE_}}", dto.message);
+      emailTemplate = emailTemplate.replace(
+        "{{_YEAR_}}",
+        new Date().getFullYear().toString()
+      );
+      emailTemplate = emailTemplate.replace("{{_COMPANY_}}", evCompany);
+      const info = await transporter.sendMail({
+        from: `"${evCompany}" <${evEmail}>`, // Sender address
+        to: `${dto.email} ${evEmail}`, // List of recipients
+        subject: `We've received your message – ${evCompany} Support Team | ${dto.subject}`, // Subject line
+        html: emailTemplate, // HTML body
+      });
+
+      console.log("Message sent: %s", info.messageId);
+      console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
+      return true;
+    } catch (ex) {
+      throw ex;
+    }
+  }
 }

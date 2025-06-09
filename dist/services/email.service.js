@@ -95,6 +95,40 @@ let EmailService = class EmailService {
             throw ex;
         }
     }
+    async sendEmailFromContact(dto) {
+        try {
+            const evEmail = this.config.get("EV_EMAIL");
+            const evPass = this.config.get("EV_PASS");
+            const evTempPath = "../assets/email-form-confirmation.html";
+            const evCompany = this.config.get("EV_COMPANY");
+            const transporter = nodemailer_1.default.createTransport({
+                service: "gmail",
+                auth: {
+                    user: evEmail,
+                    pass: evPass.toString().trim(),
+                },
+            });
+            let emailTemplate = await (0, promises_1.readFile)(path_1.default.join(__dirname, evTempPath), "utf-8");
+            emailTemplate = emailTemplate.replace("{{_NAME_}}", dto.name);
+            emailTemplate = emailTemplate.replace("{{_EMAIL_}}", dto.email);
+            emailTemplate = emailTemplate.replace("{{_SUBJECT_}}", dto.subject);
+            emailTemplate = emailTemplate.replace("{{_MESSAGE_}}", dto.message);
+            emailTemplate = emailTemplate.replace("{{_YEAR_}}", new Date().getFullYear().toString());
+            emailTemplate = emailTemplate.replace("{{_COMPANY_}}", evCompany);
+            const info = await transporter.sendMail({
+                from: `"${evCompany}" <${evEmail}>`,
+                to: `${dto.email} ${evEmail}`,
+                subject: `We've received your message – ${evCompany} Support Team | ${dto.subject}`,
+                html: emailTemplate,
+            });
+            console.log("Message sent: %s", info.messageId);
+            console.log("Preview URL: %s", nodemailer_1.default.getTestMessageUrl(info));
+            return true;
+        }
+        catch (ex) {
+            throw ex;
+        }
+    }
 };
 EmailService = __decorate([
     (0, common_1.Injectable)(),

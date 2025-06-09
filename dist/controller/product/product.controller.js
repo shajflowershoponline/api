@@ -163,6 +163,7 @@ __decorate([
                 pageIndex: { type: "string" },
                 order: { type: "object" },
                 customerUserId: { type: "string" },
+                keyword: { type: "string" },
                 columnDef: {
                     type: "array",
                     items: {
@@ -177,7 +178,7 @@ __decorate([
                     },
                 },
             },
-            required: ["pageSize", "pageIndex", "columnDef"],
+            required: ["pageSize", "pageIndex", "columnDef", "keyword"],
         },
     }),
     __param(0, (0, common_1.Body)()),

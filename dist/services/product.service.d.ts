@@ -15,12 +15,14 @@ export declare class ProductService {
     private firebaseProvider;
     private readonly productRepo;
     constructor(firebaseProvider: FirebaseProvider, productRepo: Repository<Product>);
-    getClientPagination({ pageSize, pageIndex, order, columnDef, customerUserId, }: {
+    advancedSearchProductIds(query: string): Promise<string[]>;
+    getClientPagination({ pageSize, pageIndex, order, columnDef, customerUserId, keyword, }: {
         pageSize: any;
         pageIndex: any;
         order: any;
         columnDef: any;
         customerUserId: any;
+        keyword: any;
     }): Promise<{
         results: Product[];
         total: number;

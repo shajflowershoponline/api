@@ -29,6 +29,8 @@ import { GeolocationService } from "./services/geolocation.service";
 import { DeliveryModule } from "./controller/delivery/delivery.module";
 import { CustomerUserWishListService } from "./services/customer-user-wish-list.service";
 import { CustomerUserWishListModule } from "./controller/customer-user-wish-list/customer-user-wish-list.module";
+import { EmailModule } from "./controller/email/email.module";
+
 const envFilePath: string = getEnvPath(`${__dirname}/common/envs`);
 
 @Module({
@@ -60,6 +62,7 @@ const envFilePath: string = getEnvPath(`${__dirname}/common/envs`);
     GeolocationModule,
     DeliveryModule,
     CustomerUserWishListModule,
+    EmailModule,
   ],
   providers: [AppService],
   controllers: [],

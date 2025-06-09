@@ -56,6 +56,7 @@ const system_config_module_1 = require("./controller/system-config/system-config
 const geolocation_module_1 = require("./controller/geolocation/geolocation.module");
 const delivery_module_1 = require("./controller/delivery/delivery.module");
 const customer_user_wish_list_module_1 = require("./controller/customer-user-wish-list/customer-user-wish-list.module");
+const email_module_1 = require("./controller/email/email.module");
 const envFilePath = (0, utils_1.getEnvPath)(`${__dirname}/common/envs`);
 let AppModule = class AppModule {
 };
@@ -89,6 +90,7 @@ AppModule = __decorate([
             geolocation_module_1.GeolocationModule,
             delivery_module_1.DeliveryModule,
             customer_user_wish_list_module_1.CustomerUserWishListModule,
+            email_module_1.EmailModule,
         ],
         providers: [app_service_1.AppService],
         controllers: [],

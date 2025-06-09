@@ -20,6 +20,7 @@ export declare class ProductController {
         pageIndex: string;
         order: any;
         customerUserId: string;
+        keyword: string;
         columnDef: {
             apiNotation: string;
             filter?: string;

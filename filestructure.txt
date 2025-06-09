@@ -17,6 +17,7 @@
     |-- app.service.ts
     |-- assets
         |-- assetlinks.json
+        |-- email-form-confirmation.html
         |-- email-register-verification.html
         |-- email-reset-password-otp.html
     |-- common
@@ -80,6 +81,10 @@
             |-- discounts.controller.spec.ts
             |-- discounts.controller.ts
             |-- discounts.module.ts
+        |-- email
+            |-- email.controller.spec.ts
+            |-- email.controller.ts
+            |-- email.module.ts
         |-- geolocation
             |-- geolocation.controller.spec.ts
             |-- geolocation.controller.ts

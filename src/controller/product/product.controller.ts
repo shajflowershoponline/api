@@ -86,6 +86,7 @@ export class ProductController {
         pageIndex: { type: "string" },
         order: { type: "object" },
         customerUserId: { type: "string" },
+        keyword: { type: "string" },
         columnDef: {
           type: "array",
           items: {
@@ -100,7 +101,7 @@ export class ProductController {
           },
         },
       },
-      required: ["pageSize", "pageIndex", "columnDef"],
+      required: ["pageSize", "pageIndex", "columnDef", "keyword"],
     },
   })
   //   @UseGuards(JwtAuthGuard)
@@ -111,6 +112,7 @@ export class ProductController {
       pageIndex: string;
       order: any;
       customerUserId: string;
+      keyword: string;
       columnDef: {
         apiNotation: string;
         filter?: string;

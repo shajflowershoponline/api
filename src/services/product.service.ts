@@ -33,6 +33,40 @@ export class ProductService {
     @InjectRepository(Product)
     private readonly productRepo: Repository<Product>
   ) {}
+  async advancedSearchProductIds(query: string): Promise<string[]> {
+    if (!query) return [];
+
+    const keywords = query
+      .split(/[^a-zA-Z0-9]+/)
+      .filter(Boolean)
+      .map((kw) => kw.toLowerCase());
+
+    if (keywords.length === 0) return [];
+
+    const conditions: string[] = [];
+
+    for (const keyword of keywords) {
+      conditions.push(`LOWER(p."Name") LIKE '%${keyword}%' 
+      OR LOWER(p."ShortDesc") LIKE '%${keyword}%' 
+      OR LOWER(p."LongDesc") LIKE '%${keyword}%'
+      OR LOWER(p."Color") LIKE '%${keyword}%'
+      OR LOWER(c."Name") LIKE '%${keyword}%' 
+      OR LOWER(c."Desc") LIKE '%${keyword}%'`);
+    }
+
+    const whereClause =
+      conditions.length > 0 ? `WHERE (${conditions.join(" OR ")})` : "";
+
+    const sql = `
+    SELECT DISTINCT p."ProductId"
+    FROM dbo."Product" p
+    LEFT JOIN dbo."Category" c ON p."CategoryId" = c."CategoryId"
+    ${whereClause}
+  `;
+
+    const rows = await this.productRepo.query(sql);
+    return rows.map((row) => row.ProductId);
+  }
 
   async getClientPagination({
     pageSize,
@@ -40,6 +74,7 @@ export class ProductService {
     order,
     columnDef,
     customerUserId,
+    keyword,
   }) {
     const skip =
       Number(pageIndex) > 0 ? Number(pageIndex) * Number(pageSize) : 0;
@@ -47,6 +82,7 @@ export class ProductService {
 
     const newColDef = [];
     const collectionClDef = [];
+    columnDef = columnDef ? columnDef : [];
     for (const col of columnDef) {
       if (col.name.includes("collection")) {
         collectionClDef.push(col);
@@ -54,7 +90,14 @@ export class ProductService {
         newColDef.push(col);
       }
     }
-    const condition = columnDefToTypeORMCondition(newColDef);
+    const productIds = await this.advancedSearchProductIds(keyword);
+    let condition = columnDefToTypeORMCondition(newColDef);
+    if (productIds.length > 0) {
+      condition = {
+        ...condition,
+        productId: In(productIds.map((x) => Number(x))),
+      };
+    }
     const collectionCondition = columnDefToTypeORMCondition(collectionClDef);
     const [results, total, customerUserWishlist, discounts] = await Promise.all(
       [
