@@ -50,8 +50,11 @@ export class ProductService {
       OR LOWER(p."ShortDesc") LIKE '%${keyword}%' 
       OR LOWER(p."LongDesc") LIKE '%${keyword}%'
       OR LOWER(p."Color") LIKE '%${keyword}%'
-      OR LOWER(c."Name") LIKE '%${keyword}%' 
-      OR LOWER(c."Desc") LIKE '%${keyword}%'`);
+      OR LOWER(cat."Name") LIKE '%${keyword}%' 
+      OR LOWER(cat."Desc") LIKE '%${keyword}%'
+      OR LOWER(col."Name") LIKE '%${keyword}%' 
+      OR LOWER(col."Desc") LIKE '%${keyword}%'
+      `);
     }
 
     const whereClause =
@@ -60,7 +63,9 @@ export class ProductService {
     const sql = `
     SELECT DISTINCT p."ProductId"
     FROM dbo."Product" p
-    LEFT JOIN dbo."Category" c ON p."CategoryId" = c."CategoryId"
+    LEFT JOIN dbo."Category" cat ON p."CategoryId" = cat."CategoryId"
+    LEFT JOIN dbo."ProductCollection" pc ON p."ProductId" = pc."ProductId"
+    LEFT JOIN dbo."Collection" col ON pc."CollectionId" = col."CollectionId"
     ${whereClause}
   `;
 
@@ -232,7 +237,7 @@ export class ProductService {
     };
   }
 
-  async getSearchFilter({ columnDef }) {
+  async getSearchFilter({ columnDef, keyword }) {
     const newColDef = [];
     const collectionClDef = [];
     for (const col of columnDef) {
@@ -242,7 +247,15 @@ export class ProductService {
         newColDef.push(col);
       }
     }
-    const condition = columnDefToTypeORMCondition(newColDef);
+    
+    const productIds = await this.advancedSearchProductIds(keyword);
+    let condition = columnDefToTypeORMCondition(newColDef);
+    if (productIds.length > 0) {
+      condition = {
+        ...condition,
+        productId: In(productIds.map((x) => Number(x))),
+      };
+    }
     const collectionCondition = columnDefToTypeORMCondition(collectionClDef);
 
     const [results, categories, collections] = await Promise.all([
@@ -414,7 +427,7 @@ export class ProductService {
       this.productRepo.manager.find(CustomerUserWishlist, {
         where: {
           customerUser: {
-            customerUserId,
+            customerUserId: customerUserId ?? "0",
           },
         },
         relations: {

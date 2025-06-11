@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { HttpService } from "@nestjs/axios";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, ILike } from "typeorm";
+import { Repository, ILike, Between, In } from "typeorm";
 import { Product } from "../db/entities/Product";
 import { Category } from "../db/entities/Category";
 import { Collection } from "../db/entities/Collection";
@@ -11,11 +11,17 @@ import { CartItems } from "../db/entities/CartItems";
 import { CustomerUserWishlist } from "../db/entities/CustomerUserWishlist";
 import { ConfigService } from "@nestjs/config";
 import { firstValueFrom } from "rxjs";
+import { ProductService } from "./product.service";
+import { CategoryService } from "./category.service";
+import { CustomerUserAiSearch } from "src/db/entities/CustomerUserAiSearch";
+import { Discounts } from "src/db/entities/Discounts";
 
 @Injectable()
 export class AIService {
   constructor(
     private readonly config: ConfigService,
+    private readonly productService: ProductService,
+    private readonly categoryService: CategoryService,
     private readonly httpService: HttpService,
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
@@ -30,7 +36,9 @@ export class AIService {
     @InjectRepository(CartItems)
     private readonly cartItemsRepository: Repository<CartItems>,
     @InjectRepository(CustomerUserWishlist)
-    private readonly wishlistRepository: Repository<CustomerUserWishlist>
+    private readonly wishlistRepository: Repository<CustomerUserWishlist>,
+    @InjectRepository(CustomerUserAiSearch)
+    private readonly customerUserAiSearchRepository: Repository<CustomerUserAiSearch>
   ) {}
 
   private async buildPrompt(userQuery: string): Promise<string> {
@@ -204,8 +212,8 @@ export class AIService {
     `;
   }
 
-  async handleSearch(userQuery: string) {
-    const prompt = await this.buildPrompt(userQuery);
+  async handleSearch({ query, customerUserId }) {
+    const prompt = await this.buildPrompt(query);
 
     const response = await firstValueFrom(
       this.httpService.post(
@@ -214,7 +222,7 @@ export class AIService {
           model: "llama3-70b-8192",
           messages: [
             { role: "system", content: prompt },
-            { role: "user", content: userQuery },
+            { role: "user", content: query },
           ],
           temperature: 0.0,
           max_tokens: 800,
@@ -242,7 +250,12 @@ export class AIService {
         throw new Error("No JSON block detected in AI output.");
       }
 
-      const cleanJson = aiMessage.slice(firstCurly, lastCurly + 1).trim();
+      // const cleanJson = aiMessage.slice(firstCurly, lastCurly + 1).trim();
+      const cleanJson = aiMessage
+        .slice(firstCurly, lastCurly + 1)
+        .replace(/\]\]/g, "]") // Clean up double brackets
+        .trim();
+
       aiResult = JSON.parse(cleanJson);
     } catch (err) {
       console.error("Parse Error:", err.message);
@@ -253,31 +266,46 @@ export class AIService {
 
     let results = null;
     if (intent === "search_product") {
-      results = await this.searchProducts(data);
+      results = await this.searchProducts(data, customerUserId);
     } else if (intent === "list_categories") {
-      results = await this.listCategories({ ...data, orderBy, orderDirection });
+      results = await this.listCategories(
+        { ...data, orderBy, orderDirection },
+        customerUserId
+      );
     } else if (intent === "list_collections") {
-      results = await this.listCollections({
-        ...data,
-        orderBy,
-        orderDirection,
-      });
+      results = await this.listCollections(
+        {
+          ...data,
+          orderBy,
+          orderDirection,
+        },
+        customerUserId
+      );
     } else if (intent === "list_colors") {
-      results = await this.listColors({ ...data, orderBy, orderDirection });
+      results = await this.listColors(
+        { ...data, orderBy, orderDirection },
+        customerUserId
+      );
     } else if (intent === "list_trend") {
-      results = await this.listTrends();
+      results = await this.listTrends(customerUserId);
     } else {
       throw Error(
         "Sorry, I can only assist you with flowers, bouquets, categories, collections, or colors. Please rephrase your question!"
       );
     }
 
+    // const customerUserAiSearch = new CustomerUserAiSearch();
+
+    // customerUserAiSearch.bestSellers = results.
+
+    // await this.customerUserAiSearchRepository.save(customerUserAiSearch);
+
     return {
       results,
       params: aiResult,
     };
   }
-  private async listCategories(data?: any) {
+  private async listCategories(data: any, customerUserId) {
     const qb = this.categoryRepository
       .createQueryBuilder("category")
       .leftJoin("category.products", "product")
@@ -286,14 +314,34 @@ export class AIService {
       .where('category."Active" = true');
 
     // Optional Filters
+    // Combine categories, collections, occasions, and tags into a single OR filter
+    const orWhereExpressions: string[] = [];
+    const orWhereParams: Record<string, any> = {};
+
+    if (data?.categories?.length > 0) {
+      data.categories.forEach((c: string, idx: number) => {
+        orWhereExpressions.push(`LOWER(category."Name") LIKE :category${idx}`);
+        orWhereParams[`category${idx}`] = `%${c.toLowerCase()}%`;
+      });
+    }
     if (data?.collections?.length > 0) {
-      qb.andWhere('collection."Name" IN (:...collections)', {
-        collections: data.collections,
+      data.collections.forEach((c: string, idx: number) => {
+        orWhereExpressions.push(
+          `LOWER(collection."Name") LIKE :collection${idx}`
+        );
+        orWhereParams[`collection${idx}`] = `%${c.toLowerCase()}%`;
       });
     }
     if (data?.occasions?.length > 0 || data?.tags?.length > 0) {
       const tags = [...(data.occasions || []), ...(data.tags || [])];
-      qb.andWhere('collection."Name" IN (:...tags)', { tags });
+      tags.forEach((tag: string, idx: number) => {
+        orWhereExpressions.push(`LOWER(collection."Name") LIKE :tag${idx}`);
+        orWhereParams[`tag${idx}`] = `%${tag.toLowerCase()}%`;
+      });
+    }
+
+    if (orWhereExpressions.length > 0) {
+      qb.andWhere(orWhereExpressions.join(" OR "), orWhereParams);
     }
     if (data?.minPrice) {
       qb.andWhere('product."Price" >= :minPrice', { minPrice: data.minPrice });
@@ -310,7 +358,7 @@ export class AIService {
         .orderBy("price", data.orderDirection?.toUpperCase() || "ASC");
     } else if (data?.orderBy === "popularity_score") {
       qb.addSelect(
-        `(SELECT COUNT(*) FROM "CartItems" cart WHERE cart."ProductId" = product."ProductId") + (SELECT COUNT(*) FROM "CustomerUserWishlist" wish WHERE wish."ProductId" = product."ProductId")`,
+        `(SELECT COUNT(*) FROM dbo."CartItems" cart WHERE cart."ProductId" = product."ProductId") + (SELECT COUNT(*) FROM dbo."CustomerUserWishlist" wish WHERE wish."ProductId" = product."ProductId")`,
         "popularityScore"
       )
         .groupBy('category."CategoryId"')
@@ -321,7 +369,7 @@ export class AIService {
         );
     } else if (data?.orderBy === "order_count") {
       qb.addSelect(
-        `(SELECT SUM(orderItem."Quantity") FROM "OrderItems" orderItem WHERE orderItem."ProductId" = product."ProductId")`,
+        `(SELECT SUM(orderItem."Quantity") FROM dbo."OrderItems" orderItem WHERE orderItem."ProductId" = product."ProductId")`,
         "orderCount"
       )
         .groupBy('category."CategoryId"')
@@ -334,25 +382,147 @@ export class AIService {
     }
 
     const categories = await qb.getRawMany();
-    return { categories: categories.map((c) => c.category_name || c.name) };
+    const categoryIds = categories.map((c) =>
+      Number(c.category_CategoryId ?? 0)
+    );
+    const categoryNames = categories.map((c) => c.category_Name);
+
+    const tags = [
+      ...(data.categories || []),
+      ...(data.collections || []),
+      ...(data.occasions || []),
+      ...(data.tags || []),
+    ];
+    const conditionForProductFocus = {
+      active: true,
+    } as any;
+    if (tags.length > 0) {
+      const productIds = await this.productService.advancedSearchProductIds(
+        tags.join(" ")
+      );
+
+      if (productIds.length > 0) {
+        conditionForProductFocus.productId = In(
+          productIds.map((x) => Number(x))
+        );
+      }
+    }
+
+    const [products, total, customerUserWishlist, discounts] =
+      await Promise.all([
+        this.productRepository.find({
+          where: [
+            conditionForProductFocus,
+            {
+              category: {
+                categoryId: In(categoryIds),
+              },
+            },
+          ],
+          relations: {
+            category: { thumbnailFile: true },
+            productCollections: { collection: true },
+            productImages: true,
+          },
+        }),
+        this.productRepository.count({
+          where: [
+            conditionForProductFocus,
+            {
+              category: {
+                categoryId: In(categoryIds),
+              },
+            },
+          ],
+        }),
+        this.productRepository.manager.find(CustomerUserWishlist, {
+          where: {
+            customerUser: {
+              customerUserId,
+            },
+          },
+          relations: {
+            customerUser: true,
+            product: true,
+          },
+        }),
+        this.productRepository.manager.find(Discounts, {
+          where: {
+            active: true,
+          },
+        }),
+      ]);
+
+    return {
+      categories: categoryNames,
+      products: products.map((p) => {
+        const maxDiscount =
+          (p.discountTagsIds ?? "") !== ""
+            ? Math.max(
+                ...discounts
+                  .filter((d) =>
+                    p.discountTagsIds.split(",").includes(d.discountId)
+                  )
+                  .map((d) =>
+                    d.type === "PERCENTAGE"
+                      ? (parseFloat(d.value) / 100) * Number(p.price ?? 0)
+                      : parseFloat(d.value)
+                  )
+              )
+            : 0;
+        p["discountPrice"] = (Number(p.price ?? 0) - maxDiscount).toString();
+        p["isSale"] =
+          p.discountTagsIds?.length + p.productCollections.length > 0 &&
+          (p.productCollections.some(
+            (x) => x.product?.productId === p.productId && x.collection.isSale
+          ) ||
+            (p.discountTagsIds ?? "").split(", ").length > 0);
+        p["iAmInterested"] = customerUserWishlist.some(
+          (x) => x.product?.productId === p.productId
+        );
+        p["customerUserWishlist"] = customerUserWishlist.find(
+          (x) => x.product?.productId === p.productId
+        );
+        return p;
+      }),
+      total,
+    };
   }
 
-  private async listCollections(data?: any) {
+  private async listCollections(data: any, customerUserId) {
     const qb = this.collectionRepository
       .createQueryBuilder("collection")
       .leftJoin("collection.productCollections", "productCollection")
       .leftJoin("productCollection.product", "product")
       .where('collection."Active" = true');
 
+    // Optional Filters
+    // Combine categories, collections, occasions, and tags into a single OR filter
+    const orWhereExpressions: string[] = [];
+    const orWhereParams: Record<string, any> = {};
+
     if (data?.categories?.length > 0) {
-      qb.andWhere('product."CategoryId" IN (:...categories)', {
-        categories: data.categories,
+      data.categories.forEach((c: string, idx: number) => {
+        orWhereExpressions.push(`LOWER(category."Name") LIKE :category${idx}`);
+        orWhereParams[`category${idx}`] = `%${c.toLowerCase()}%`;
+      });
+    }
+    if (data?.collections?.length > 0) {
+      data.collections.forEach((c: string, idx: number) => {
+        orWhereExpressions.push(
+          `LOWER(collection."Name") LIKE :collection${idx}`
+        );
+        orWhereParams[`collection${idx}`] = `%${c.toLowerCase()}%`;
       });
     }
     if (data?.occasions?.length > 0 || data?.tags?.length > 0) {
       const tags = [...(data.occasions || []), ...(data.tags || [])];
-      qb.andWhere('collection."Name" IN (:...tags)', { tags });
+      tags.forEach((tag: string, idx: number) => {
+        orWhereExpressions.push(`LOWER(collection."Name") LIKE :tag${idx}`);
+        orWhereParams[`tag${idx}`] = `%${tag.toLowerCase()}%`;
+      });
     }
+
     if (data?.minPrice) {
       qb.andWhere('product."Price" >= :minPrice', { minPrice: data.minPrice });
     }
@@ -367,7 +537,7 @@ export class AIService {
         .orderBy("price", data.orderDirection?.toUpperCase() || "ASC");
     } else if (data?.orderBy === "popularity_score") {
       qb.addSelect(
-        `(SELECT COUNT(*) FROM "CartItems" cart WHERE cart."ProductId" = product."ProductId") + (SELECT COUNT(*) FROM "CustomerUserWishlist" wish WHERE wish."ProductId" = product."ProductId")`,
+        `(SELECT COUNT(*) FROM dbo."CartItems" cart WHERE cart."ProductId" = product."ProductId") + (SELECT COUNT(*) FROM dbo."CustomerUserWishlist" wish WHERE wish."ProductId" = product."ProductId")`,
         "popularityScore"
       )
         .groupBy('collection."CollectionId"')
@@ -378,7 +548,7 @@ export class AIService {
         );
     } else if (data?.orderBy === "order_count") {
       qb.addSelect(
-        `(SELECT SUM(orderItem."Quantity") FROM "OrderItems" orderItem WHERE orderItem."ProductId" = product."ProductId")`,
+        `(SELECT SUM(orderItem."Quantity") FROM dbo."OrderItems" orderItem WHERE orderItem."ProductId" = product."ProductId")`,
         "orderCount"
       )
         .groupBy('collection."CollectionId"')
@@ -391,10 +561,116 @@ export class AIService {
     }
 
     const collections = await qb.getRawMany();
-    return { collections: collections.map((c) => c.collection_name || c.name) };
+    // return { collections: collections.map((c) => c.collection_name || c.name) };
+
+    const collectionIds = collections.map((c) =>
+      Number(c.collection_CollectionId ?? 0)
+    );
+    const collectionNames = collections.map((c) => c.collection_Name);
+
+    const tags = [
+      ...(data.categories || []),
+      ...(data.collections || []),
+      ...(data.occasions || []),
+      ...(data.tags || []),
+    ];
+    const conditionForProductFocus = {
+      active: true,
+    } as any;
+    if (tags.length > 0) {
+      const productIds = await this.productService.advancedSearchProductIds(
+        tags.join(" ")
+      );
+
+      if (productIds.length > 0) {
+        conditionForProductFocus.productId = In(
+          productIds.map((x) => Number(x))
+        );
+      }
+    }
+
+    const [products, total, customerUserWishlist, discounts] =
+      await Promise.all([
+        this.productRepository.find({
+          where: [
+            conditionForProductFocus,
+            {
+              category: {
+                categoryId: In(collectionIds),
+              },
+            },
+          ],
+          relations: {
+            category: { thumbnailFile: true },
+            productCollections: { collection: true },
+            productImages: true,
+          },
+        }),
+        this.productRepository.count({
+          where: [
+            conditionForProductFocus,
+            {
+              category: {
+                categoryId: In(collectionIds),
+              },
+            },
+          ],
+        }),
+        this.productRepository.manager.find(CustomerUserWishlist, {
+          where: {
+            customerUser: {
+              customerUserId,
+            },
+          },
+          relations: {
+            customerUser: true,
+            product: true,
+          },
+        }),
+        this.productRepository.manager.find(Discounts, {
+          where: {
+            active: true,
+          },
+        }),
+      ]);
+
+    return {
+      collections: collectionNames,
+      products: products.map((p) => {
+        const maxDiscount =
+          (p.discountTagsIds ?? "") !== ""
+            ? Math.max(
+                ...discounts
+                  .filter((d) =>
+                    p.discountTagsIds.split(",").includes(d.discountId)
+                  )
+                  .map((d) =>
+                    d.type === "PERCENTAGE"
+                      ? (parseFloat(d.value) / 100) * Number(p.price ?? 0)
+                      : parseFloat(d.value)
+                  )
+              )
+            : 0;
+        p["discountPrice"] = (Number(p.price ?? 0) - maxDiscount).toString();
+        p["isSale"] =
+          p.discountTagsIds?.length + p.productCollections.length > 0 &&
+          (p.productCollections.some(
+            (x) => x.product?.productId === p.productId && x.collection.isSale
+          ) ||
+            (p.discountTagsIds ?? "").split(", ").length > 0);
+        p["iAmInterested"] = customerUserWishlist.some(
+          (x) => x.product?.productId === p.productId
+        );
+        p["customerUserWishlist"] = customerUserWishlist.find(
+          (x) => x.product?.productId === p.productId
+        );
+        return p;
+      }),
+      total,
+    };
   }
 
-  private async listColors(data?: any) {
+  private async listColors(data: any, customerUserId) {
     const qb = this.productRepository
       .createQueryBuilder("product")
       .leftJoin("product.productCollections", "productCollection")
@@ -403,19 +679,35 @@ export class AIService {
       .where('product."Active" = true')
       .andWhere('product."Color" IS NOT NULL');
 
-    if (data?.collections?.length > 0) {
-      qb.andWhere('collection."Name" IN (:...collections)', {
-        collections: data.collections,
-      });
-    }
+    // Optional Filters
+    // Combine categories, collections, occasions, and tags into a single OR filter
+    const orWhereExpressions: string[] = [];
+    const orWhereParams: Record<string, any> = {};
+
     if (data?.categories?.length > 0) {
-      qb.andWhere('category."Name" IN (:...categories)', {
-        categories: data.categories,
+      data.categories.forEach((c: string, idx: number) => {
+        orWhereExpressions.push(`LOWER(category."Name") LIKE :category${idx}`);
+        orWhereParams[`category${idx}`] = `%${c.toLowerCase()}%`;
       });
     }
-    if (data?.tags?.length > 0 || data?.occasions?.length > 0) {
-      const tags = [...(data.tags || []), ...(data.occasions || [])];
-      qb.andWhere('collection."Name" IN (:...tags)', { tags });
+    if (data?.collections?.length > 0) {
+      data.collections.forEach((c: string, idx: number) => {
+        orWhereExpressions.push(
+          `LOWER(collection."Name") LIKE :collection${idx}`
+        );
+        orWhereParams[`collection${idx}`] = `%${c.toLowerCase()}%`;
+      });
+    }
+    if (data?.occasions?.length > 0 || data?.tags?.length > 0) {
+      const tags = [...(data.occasions || []), ...(data.tags || [])];
+      tags.forEach((tag: string, idx: number) => {
+        orWhereExpressions.push(`LOWER(collection."Name") LIKE :tag${idx}`);
+        orWhereParams[`tag${idx}`] = `%${tag.toLowerCase()}%`;
+      });
+    }
+
+    if (orWhereExpressions.length > 0) {
+      qb.andWhere(orWhereExpressions.join(" OR "), orWhereParams);
     }
     if (data?.minPrice) {
       qb.andWhere('product."Price" >= :minPrice', { minPrice: data.minPrice });
@@ -427,77 +719,285 @@ export class AIService {
     if (data?.orderBy === "price") {
       qb.addSelect('MIN(product."Price")', "price")
         .groupBy('product."Color"')
+        .addGroupBy('product."ProductId"')
         .orderBy("price", data.orderDirection?.toUpperCase() || "ASC");
     } else if (data?.orderBy === "popularity_score") {
       qb.addSelect(
-        `(SELECT COUNT(*) FROM "CartItems" cart WHERE cart."ProductId" = product."ProductId") + (SELECT COUNT(*) FROM "CustomerUserWishlist" wish WHERE wish."ProductId" = product."ProductId")`,
+        `(SELECT COUNT(*) FROM dbo."CartItems" cart WHERE cart."ProductId" = product."ProductId") + product."Interested"`,
         "popularityScore"
       )
         .groupBy('product."Color"')
+        .addGroupBy('product."ProductId"')
         .orderBy(
-          "popularityScore",
+          `product."Interested"`,
           data.orderDirection?.toUpperCase() || "DESC"
         );
     } else if (data?.orderBy === "order_count") {
       qb.addSelect(
-        `(SELECT SUM(orderItem."Quantity") FROM "OrderItems" orderItem WHERE orderItem."ProductId" = product."ProductId")`,
+        `(SELECT SUM(orderItem."Quantity") FROM dbo."OrderItems" orderItem WHERE orderItem."ProductId" = product."ProductId")`,
         "orderCount"
       )
         .groupBy('product."Color"')
+        .addGroupBy('product."ProductId"')
         .orderBy("orderCount", data.orderDirection?.toUpperCase() || "DESC");
-    } else {
-      qb.groupBy('product."Color"');
     }
 
-    const colorsResult = await qb.getRawMany();
+    const colors = await qb.getRawMany();
+    const colorNames = colors.map((c) => c.product_Color);
+
+    const tags = [
+      ...(data.categories || []),
+      ...(data.collections || []),
+      ...(data.occasions || []),
+      ...(data.tags || []),
+    ];
+    const conditionForProductFocus = {
+      active: true,
+    } as any;
+    if (tags.length > 0) {
+      const productIds = await this.productService.advancedSearchProductIds(
+        tags.join(" ")
+      );
+
+      if (productIds.length > 0) {
+        conditionForProductFocus.productId = In(
+          productIds.map((x) => Number(x))
+        );
+      }
+    }
+
+    const [products, total, customerUserWishlist, discounts] =
+      await Promise.all([
+        this.productRepository.find({
+          where: [
+            conditionForProductFocus,
+            {
+              color: In(colorNames),
+            },
+          ],
+          relations: {
+            category: { thumbnailFile: true },
+            productCollections: { collection: true },
+            productImages: true,
+          },
+        }),
+        this.productRepository.count({
+          where: [
+            conditionForProductFocus,
+            {
+              color: In(colorNames),
+            },
+          ],
+        }),
+        this.productRepository.manager.find(CustomerUserWishlist, {
+          where: {
+            customerUser: {
+              customerUserId,
+            },
+          },
+          relations: {
+            customerUser: true,
+            product: true,
+          },
+        }),
+        this.productRepository.manager.find(Discounts, {
+          where: {
+            active: true,
+          },
+        }),
+      ]);
 
     return {
-      colors: colorsResult.map((c) => c.color),
+      colors: colorNames,
+      products: products.map((p) => {
+        const maxDiscount =
+          (p.discountTagsIds ?? "") !== ""
+            ? Math.max(
+                ...discounts
+                  .filter((d) =>
+                    p.discountTagsIds.split(",").includes(d.discountId)
+                  )
+                  .map((d) =>
+                    d.type === "PERCENTAGE"
+                      ? (parseFloat(d.value) / 100) * Number(p.price ?? 0)
+                      : parseFloat(d.value)
+                  )
+              )
+            : 0;
+        p["discountPrice"] = (Number(p.price ?? 0) - maxDiscount).toString();
+        p["isSale"] =
+          p.discountTagsIds?.length + p.productCollections.length > 0 &&
+          (p.productCollections.some(
+            (x) => x.product?.productId === p.productId && x.collection.isSale
+          ) ||
+            (p.discountTagsIds ?? "").split(", ").length > 0);
+        p["iAmInterested"] = customerUserWishlist.some(
+          (x) => x.product?.productId === p.productId
+        );
+        p["customerUserWishlist"] = customerUserWishlist.find(
+          (x) => x.product?.productId === p.productId
+        );
+        return p;
+      }),
+      total,
     };
   }
 
-  private async searchProducts(data: any) {
-    const condition: any = { active: true };
-    if (data.productName) {
-      condition.name = ILike(`%${data.productName}%`);
+  private async searchProducts(data: any, customerUserId: string) {
+    const conditionForProductFocus: any = { active: true };
+    const conditionCategoryFocus: any = { active: true };
+    const productIds = await this.productService.advancedSearchProductIds(
+      data.productName ?? ""
+    );
+    const categoryIds = await this.categoryService.advancedSearchCategoryIds(
+      data.category ?? ""
+    );
+    if (productIds.length > 0) {
+      conditionForProductFocus.productId = In(productIds.map((x) => Number(x)));
+    }
+    if (categoryIds.length > 0) {
+      conditionCategoryFocus.category = {
+        categoryId: In(categoryIds.map((x) => Number(x))),
+        active: true,
+      };
     }
     if (data.category) {
-      condition.category = { name: ILike(`%${data.category}%`) };
+      conditionForProductFocus.category = {
+        name: ILike(`%${data.category}%`),
+        active: true,
+      };
+      conditionCategoryFocus.category = { name: ILike(`%${data.category}%`) };
     }
-    if (data.price) {
-      condition.price = data.price;
-    }
-    if (data.maxPrice) {
-      condition.price = { ...(condition.price || {}), lte: data.maxPrice };
-    }
-    if (data.minPrice) {
-      condition.price = { ...(condition.price || {}), gte: data.minPrice };
+    // Handle price, maxPrice, minPrice logic
+    if (data.price && !isNaN(Number(data.price)) && Number(data.price) > 0) {
+      // If maxPrice is set and less than price, use price as maxPrice
+      if (
+        data.maxPrice &&
+        !isNaN(Number(data.maxPrice)) &&
+        Number(data.maxPrice) > 0
+      ) {
+        data.maxPrice = Math.max(Number(data.price), Number(data.maxPrice));
+      } else {
+        data.maxPrice = Number(data.price);
+      }
+      // If minPrice is set and less than price, use minPrice as min, else use price as min
+      if (
+        data.minPrice &&
+        !isNaN(Number(data.minPrice)) &&
+        Number(data.minPrice) > 0
+      ) {
+        data.minPrice = Math.max(Number(data.price), Number(data.minPrice));
+      } else {
+        data.minPrice = Number(data.price);
+      }
+    } else {
+      if (
+        data.maxPrice &&
+        !isNaN(Number(data.maxPrice)) &&
+        Number(data.maxPrice) > 0
+      ) {
+        data.maxPrice = Number(data.maxPrice);
+      }
+      if (
+        data.minPrice &&
+        !isNaN(Number(data.minPrice)) &&
+        Number(data.minPrice) > 0
+      ) {
+        data.minPrice = Number(data.minPrice);
+      }
     }
 
-    const [products, total] = await Promise.all([
-      this.productRepository.find({
-        where: condition,
-        relations: {
-          category: { thumbnailFile: true },
-          productCollections: { collection: true },
-          productImages: true,
-        },
-      }),
-      this.productRepository.count({
-        where: condition,
-      }),
-    ]);
+    if (data.minPrice === data.maxPrice) {
+      conditionForProductFocus.price = Between(0, Number(data.maxPrice));
+      conditionCategoryFocus.price = Between(0, Number(data.maxPrice));
+    } else {
+      conditionForProductFocus.price = Between(
+        Number(data.minPrice),
+        Number(data.maxPrice)
+      );
+      conditionCategoryFocus.price = Between(
+        Number(data.minPrice),
+        Number(data.maxPrice)
+      );
+    }
+    const [products, total, customerUserWishlist, discounts] =
+      await Promise.all([
+        this.productRepository.find({
+          where: [conditionForProductFocus, conditionCategoryFocus],
+          relations: {
+            category: { thumbnailFile: true },
+            productCollections: { collection: true },
+            productImages: {
+              file: true,
+            },
+          },
+        }),
+        this.productRepository.count({
+          where: [conditionForProductFocus, conditionCategoryFocus],
+        }),
+        this.productRepository.manager.find(CustomerUserWishlist, {
+          where: {
+            customerUser: {
+              customerUserId,
+            },
+          },
+          relations: {
+            customerUser: true,
+            product: true,
+          },
+        }),
+        this.productRepository.manager.find(Discounts, {
+          where: {
+            active: true,
+          },
+        }),
+      ]);
 
-    const suggestions = await this.generateSuggestionsHybridAndNonHybrid(data);
+    const suggestions = await this.generateSuggestionsHybridAndNonHybrid(
+      data,
+      customerUserId
+    );
 
     return {
-      result: products,
+      products: products.map((p) => {
+        const maxDiscount =
+          (p.discountTagsIds ?? "") !== ""
+            ? Math.max(
+                ...discounts
+                  .filter((d) =>
+                    p.discountTagsIds.split(",").includes(d.discountId)
+                  )
+                  .map((d) =>
+                    d.type === "PERCENTAGE"
+                      ? (parseFloat(d.value) / 100) * Number(p.price ?? 0)
+                      : parseFloat(d.value)
+                  )
+              )
+            : 0;
+        p["discountPrice"] = (Number(p.price ?? 0) - maxDiscount).toString();
+        p["isSale"] =
+          p.discountTagsIds?.length + p.productCollections.length > 0 &&
+          (p.productCollections.some(
+            (x) => x.product?.productId === p.productId && x.collection.isSale
+          ) ||
+            (p.discountTagsIds ?? "").split(", ").length > 0);
+        p["iAmInterested"] = customerUserWishlist.some(
+          (x) => x.product?.productId === p.productId
+        );
+        p["customerUserWishlist"] = customerUserWishlist.find(
+          (x) => x.product?.productId === p.productId
+        );
+        return p;
+      }),
       total,
       suggestions,
     };
   }
 
-  private async generateSuggestionsHybridAndNonHybrid(data: any) {
+  private async generateSuggestionsHybridAndNonHybrid(
+    data: any,
+    customerUserId
+  ) {
     const hybridSuggestions: any = {};
 
     if (data.collections && data.collections.length > 0) {
@@ -513,15 +1013,43 @@ export class AIService {
     }
 
     if (data.color && data.color.length > 0) {
-      const availableColors = await this.productRepository.find({
-        where: {
-          active: true,
-          shortDesc: data.color,
-        },
-        select: ["shortDesc"],
-      });
-      hybridSuggestions.availableColors = availableColors.map(
-        (c) => c.shortDesc
+      const availableColors = await this.productRepository
+        .createQueryBuilder("product")
+        .select(["product.color"])
+        .where("product.active = :active", { active: true })
+        .andWhere(
+          data.color && data.color.length > 0
+            ? `(${data.color
+                .map(
+                  (_, idx) =>
+                    `(LOWER(product."Color") LIKE :color${idx} OR LOWER(product."Name") LIKE :color${idx} OR LOWER(product."ShortDesc") LIKE :color${idx} OR LOWER(product."LongDesc") LIKE :color${idx})`
+                )
+                .join(" OR ")})`
+            : "1=1",
+          data.color && data.color.length > 0
+            ? Object.fromEntries(
+                data.color.map((c: string, idx: number) => [
+                  `color${idx}`,
+                  `%${c.toLowerCase()}%`,
+                ])
+              )
+            : {}
+        )
+        .getRawMany();
+
+      // Only include colors that are in data.color (case-insensitive)
+      const colorSet = new Set(
+        (data.color || []).map((c: string) => c.trim().toLowerCase())
+      );
+      hybridSuggestions.availableColors = Array.from(
+        new Set(
+          availableColors
+            .map((c) => c.product_Color)
+            .filter(
+              (color: string) =>
+                color && colorSet.has(color.trim().toLowerCase())
+            )
+        )
       );
     }
 
@@ -540,16 +1068,15 @@ export class AIService {
           '"wishlist"."ProductId" = "product"."ProductId"'
         )
         .select('"product"."ProductId"', "productId")
-        .addSelect('"product"."Name"', "name")
         .addSelect(
-          'COUNT("cart"."CartItemId") + COUNT("wishlist"."CustomerUserWishlist")',
+          'COUNT("cart"."CartItemId") + COUNT("wishlist"."CustomerUserWishlistId")',
           "popularityScore"
         )
         .where('"product"."Active" = true')
         .groupBy('"product"."ProductId"')
         .addGroupBy('"product"."Name"')
         .orderBy(
-          'COUNT("cart"."CartItemId") + COUNT("wishlist"."CustomerUserWishlist")',
+          'COUNT("cart"."CartItemId") + COUNT("wishlist"."CustomerUserWishlistId")',
           "DESC"
         )
         .limit(5)
@@ -563,7 +1090,6 @@ export class AIService {
           '"orderItem"."ProductId" = "product"."ProductId"'
         )
         .select('"product"."ProductId"', "productId")
-        .addSelect('"product"."Name"', "name")
         .addSelect('SUM("orderItem"."Quantity")', "orderCount")
         .where('"product"."Active" = true')
         .groupBy('"product"."ProductId"')
@@ -583,7 +1109,6 @@ export class AIService {
           )
           .map((p) => ({
             productId: p.productId,
-            name: p.name,
             popularityScore: parseInt(p.popularityScore, 10),
           })),
         bestSellers: bestSellersRaw
@@ -592,16 +1117,15 @@ export class AIService {
           )
           .map((p) => ({
             productId: p.productId,
-            name: p.name,
             totalOrders: parseInt(p.orderCount, 10),
           })),
       },
     };
   }
 
-  private async listTrends() {
+  private async listTrends(customerUserId) {
     const { nonHybridSuggestions } =
-      await this.generateSuggestionsHybridAndNonHybrid({});
+      await this.generateSuggestionsHybridAndNonHybrid({}, customerUserId);
     return nonHybridSuggestions;
   }
 }

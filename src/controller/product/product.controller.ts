@@ -35,7 +35,7 @@ export class ProductController {
     const res = {} as ApiResponseModel<Product[]>;
     try {
       res.data = await this.productService.getAllFeaturedProducts(
-        customerUserId
+        customerUserId??""
       );
       res.success = true;
       return res;
@@ -139,6 +139,7 @@ export class ProductController {
     schema: {
       type: "object",
       properties: {
+        keyword: { type: "string" },
         columnDef: {
           type: "array",
           items: {
@@ -160,6 +161,7 @@ export class ProductController {
   async getSearchFilter(
     @Body()
     params: {
+      keyword: string;
       columnDef: {
         apiNotation: string;
         filter?: string;

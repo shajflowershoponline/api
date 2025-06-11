@@ -50,14 +50,19 @@ let ProductService = class ProductService {
       OR LOWER(p."ShortDesc") LIKE '%${keyword}%' 
       OR LOWER(p."LongDesc") LIKE '%${keyword}%'
       OR LOWER(p."Color") LIKE '%${keyword}%'
-      OR LOWER(c."Name") LIKE '%${keyword}%' 
-      OR LOWER(c."Desc") LIKE '%${keyword}%'`);
+      OR LOWER(cat."Name") LIKE '%${keyword}%' 
+      OR LOWER(cat."Desc") LIKE '%${keyword}%'
+      OR LOWER(col."Name") LIKE '%${keyword}%' 
+      OR LOWER(col."Desc") LIKE '%${keyword}%'
+      `);
         }
         const whereClause = conditions.length > 0 ? `WHERE (${conditions.join(" OR ")})` : "";
         const sql = `
     SELECT DISTINCT p."ProductId"
     FROM dbo."Product" p
-    LEFT JOIN dbo."Category" c ON p."CategoryId" = c."CategoryId"
+    LEFT JOIN dbo."Category" cat ON p."CategoryId" = cat."CategoryId"
+    LEFT JOIN dbo."ProductCollection" pc ON p."ProductId" = pc."ProductId"
+    LEFT JOIN dbo."Collection" col ON pc."CollectionId" = col."CollectionId"
     ${whereClause}
   `;
         const rows = await this.productRepo.query(sql);
@@ -187,7 +192,7 @@ let ProductService = class ProductService {
             total,
         };
     }
-    async getSearchFilter({ columnDef }) {
+    async getSearchFilter({ columnDef, keyword }) {
         const newColDef = [];
         const collectionClDef = [];
         for (const col of columnDef) {
@@ -198,7 +203,11 @@ let ProductService = class ProductService {
                 newColDef.push(col);
             }
         }
-        const condition = (0, utils_1.columnDefToTypeORMCondition)(newColDef);
+        const productIds = await this.advancedSearchProductIds(keyword);
+        let condition = (0, utils_1.columnDefToTypeORMCondition)(newColDef);
+        if (productIds.length > 0) {
+            condition = Object.assign(Object.assign({}, condition), { productId: (0, typeorm_2.In)(productIds.map((x) => Number(x))) });
+        }
         const collectionCondition = (0, utils_1.columnDefToTypeORMCondition)(collectionClDef);
         const [results, categories, collections] = await Promise.all([
             this.productRepo.find({
@@ -339,7 +348,7 @@ let ProductService = class ProductService {
             this.productRepo.manager.find(CustomerUserWishlist_1.CustomerUserWishlist, {
                 where: {
                     customerUser: {
-                        customerUserId,
+                        customerUserId: customerUserId !== null && customerUserId !== void 0 ? customerUserId : "0",
                     },
                 },
                 relations: {

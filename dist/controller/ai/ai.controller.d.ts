@@ -5,5 +5,6 @@ export declare class AIController {
     constructor(aiService: AIService);
     create(dto: {
         query: string;
+        customerUserId: string;
     }): Promise<ApiResponseModel<any>>;
 }

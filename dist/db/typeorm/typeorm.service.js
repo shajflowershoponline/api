@@ -29,6 +29,7 @@ const Order_1 = require("../entities/Order");
 const OrderItems_1 = require("../entities/OrderItems");
 const CustomerCoupon_1 = require("../entities/CustomerCoupon");
 const SystemConfig_1 = require("../entities/SystemConfig");
+const CustomerUserAiSearch_1 = require("../entities/CustomerUserAiSearch");
 let TypeOrmConfigService = class TypeOrmConfigService {
     createTypeOrmOptions() {
         const ssl = this.config.get("SSL");
@@ -56,7 +57,8 @@ let TypeOrmConfigService = class TypeOrmConfigService {
                 Order_1.Order,
                 OrderItems_1.OrderItems,
                 CustomerCoupon_1.CustomerCoupon,
-                SystemConfig_1.SystemConfig
+                SystemConfig_1.SystemConfig,
+                CustomerUserAiSearch_1.CustomerUserAiSearch
             ],
             synchronize: false,
             ssl: ssl.toLocaleLowerCase().includes("true"),

@@ -19,6 +19,7 @@ import { OrderItems } from "../entities/OrderItems";
 import { CustomerCoupon } from "../entities/CustomerCoupon";
 import { SystemConfig } from "../entities/SystemConfig";
 import { DataSource } from "typeorm";
+import { CustomerUserAiSearch } from "../entities/CustomerUserAiSearch";
 
 @Injectable()
 export class TypeOrmConfigService implements TypeOrmOptionsFactory {
@@ -53,7 +54,8 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
         Order,
         OrderItems,
         CustomerCoupon,
-        SystemConfig
+        SystemConfig,
+        CustomerUserAiSearch
       ],
       synchronize: false, // never use TRUE in production!
       ssl: ssl.toLocaleLowerCase().includes("true"),

@@ -7,6 +7,7 @@ import {
 } from "typeorm";
 import { CartItems } from "./CartItems";
 import { CustomerCoupon } from "./CustomerCoupon";
+import { CustomerUserAiSearch } from "./CustomerUserAiSearch";
 import { CustomerUserWishlist } from "./CustomerUserWishlist";
 import { Order } from "./Order";
 
@@ -58,6 +59,12 @@ export class CustomerUser {
     (customerCoupon) => customerCoupon.customerUser
   )
   customerCoupons: CustomerCoupon[];
+
+  @OneToMany(
+    () => CustomerUserAiSearch,
+    (customerUserAiSearch) => customerUserAiSearch.customerUser
+  )
+  customerUserAiSearches: CustomerUserAiSearch[];
 
   @OneToMany(
     () => CustomerUserWishlist,

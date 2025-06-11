@@ -32,6 +32,7 @@ export declare class ProductController {
         total: number;
     }>>;
     getSearchFilter(params: {
+        keyword: string;
         columnDef: {
             apiNotation: string;
             filter?: string;

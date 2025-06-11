@@ -28,6 +28,36 @@ export class CategoryService {
     private readonly categoryRepo: Repository<Category>
   ) {}
 
+  async advancedSearchCategoryIds(query: string): Promise<string[]> {
+    if (!query) return [];
+
+    const keywords = query
+      .split(/[^a-zA-Z0-9]+/)
+      .filter(Boolean)
+      .map((kw) => kw.toLowerCase());
+
+    if (keywords.length === 0) return [];
+
+    const conditions: string[] = [];
+
+    for (const keyword of keywords) {
+      conditions.push(`LOWER(c."Name") LIKE '%${keyword}%' 
+      OR LOWER(c."Desc") LIKE '%${keyword}%'`);
+    }
+
+    const whereClause =
+      conditions.length > 0 ? `WHERE (${conditions.join(" OR ")})` : "";
+
+    const sql = `
+    SELECT DISTINCT c."CategoryId"
+    FROM dbo."Category" c
+    ${whereClause}
+  `;
+
+    const rows = await this.categoryRepo.query(sql);
+    return rows.map((row) => row.CategoryId);
+  }
+
   async getPagination({ pageSize, pageIndex, order, keywords }) {
     const skip =
       Number(pageIndex) > 0 ? Number(pageIndex) * Number(pageSize) : 0;

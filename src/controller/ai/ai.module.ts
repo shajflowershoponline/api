@@ -12,6 +12,9 @@ import { CartItems } from "src/db/entities/CartItems";
 import { Order } from "src/db/entities/Order";
 import { OrderItems } from "src/db/entities/OrderItems";
 import { CustomerUserWishlist } from "src/db/entities/CustomerUserWishlist";
+import { ProductService } from "src/services/product.service";
+import { CategoryService } from "src/services/category.service";
+import { CustomerUserAiSearch } from "src/db/entities/CustomerUserAiSearch";
 
 @Module({
   imports: [
@@ -25,11 +28,12 @@ import { CustomerUserWishlist } from "src/db/entities/CustomerUserWishlist";
       CartItems,
       Order,
       OrderItems,
-      CustomerUserWishlist
+      CustomerUserWishlist,
+      CustomerUserAiSearch
     ]),
   ],
   controllers: [AIController],
-  providers: [AIService],
+  providers: [AIService, ProductService, CategoryService],
   exports: [AIService],
 })
 export class AIModule {}

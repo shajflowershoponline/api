@@ -1,5 +1,6 @@
 import { CartItems } from "./CartItems";
 import { CustomerCoupon } from "./CustomerCoupon";
+import { CustomerUserAiSearch } from "./CustomerUserAiSearch";
 import { CustomerUserWishlist } from "./CustomerUserWishlist";
 import { Order } from "./Order";
 export declare class CustomerUser {
@@ -17,6 +18,7 @@ export declare class CustomerUser {
     addressLandmark: string | null;
     cartItems: CartItems[];
     customerCoupons: CustomerCoupon[];
+    customerUserAiSearches: CustomerUserAiSearch[];
     customerUserWishlists: CustomerUserWishlist[];
     orders: Order[];
 }

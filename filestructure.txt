@@ -197,6 +197,7 @@
             |-- Collection.ts
             |-- CustomerCoupon.ts
             |-- CustomerUser.ts
+            |-- CustomerUserAiSearch.ts
             |-- CustomerUserWishlist.ts
             |-- Discounts.ts
             |-- File.ts

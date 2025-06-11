@@ -10,6 +10,7 @@ export declare class CategoryService {
     private firebaseProvider;
     private readonly categoryRepo;
     constructor(firebaseProvider: FirebaseProvider, categoryRepo: Repository<Category>);
+    advancedSearchCategoryIds(query: string): Promise<string[]>;
     getPagination({ pageSize, pageIndex, order, keywords }: {
         pageSize: any;
         pageIndex: any;

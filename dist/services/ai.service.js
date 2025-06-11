@@ -26,9 +26,15 @@ const CartItems_1 = require("../db/entities/CartItems");
 const CustomerUserWishlist_1 = require("../db/entities/CustomerUserWishlist");
 const config_1 = require("@nestjs/config");
 const rxjs_1 = require("rxjs");
+const product_service_1 = require("./product.service");
+const category_service_1 = require("./category.service");
+const CustomerUserAiSearch_1 = require("../db/entities/CustomerUserAiSearch");
+const Discounts_1 = require("../db/entities/Discounts");
 let AIService = class AIService {
-    constructor(config, httpService, productRepository, categoryRepository, collectionRepository, productCollectionRepository, orderItemsRepository, cartItemsRepository, wishlistRepository) {
+    constructor(config, productService, categoryService, httpService, productRepository, categoryRepository, collectionRepository, productCollectionRepository, orderItemsRepository, cartItemsRepository, wishlistRepository, customerUserAiSearchRepository) {
         this.config = config;
+        this.productService = productService;
+        this.categoryService = categoryService;
         this.httpService = httpService;
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
@@ -37,6 +43,7 @@ let AIService = class AIService {
         this.orderItemsRepository = orderItemsRepository;
         this.cartItemsRepository = cartItemsRepository;
         this.wishlistRepository = wishlistRepository;
+        this.customerUserAiSearchRepository = customerUserAiSearchRepository;
     }
     async buildPrompt(userQuery) {
         const categoryNames = this.config.get("FLOWER_TYPES");
@@ -207,13 +214,13 @@ let AIService = class AIService {
     User Query: ${userQuery}
     `;
     }
-    async handleSearch(userQuery) {
-        const prompt = await this.buildPrompt(userQuery);
+    async handleSearch({ query, customerUserId }) {
+        const prompt = await this.buildPrompt(query);
         const response = await (0, rxjs_1.firstValueFrom)(this.httpService.post(this.config.get("GROQ_API_URL"), {
             model: "llama3-70b-8192",
             messages: [
                 { role: "system", content: prompt },
-                { role: "user", content: userQuery },
+                { role: "user", content: query },
             ],
             temperature: 0.0,
             max_tokens: 800,
@@ -233,7 +240,10 @@ let AIService = class AIService {
             if (firstCurly === -1 || lastCurly === -1) {
                 throw new Error("No JSON block detected in AI output.");
             }
-            const cleanJson = aiMessage.slice(firstCurly, lastCurly + 1).trim();
+            const cleanJson = aiMessage
+                .slice(firstCurly, lastCurly + 1)
+                .replace(/\]\]/g, "]")
+                .trim();
             aiResult = JSON.parse(cleanJson);
         }
         catch (err) {
@@ -243,20 +253,20 @@ let AIService = class AIService {
         const { intent, data, orderBy, orderDirection } = aiResult;
         let results = null;
         if (intent === "search_product") {
-            results = await this.searchProducts(data);
+            results = await this.searchProducts(data, customerUserId);
         }
         else if (intent === "list_categories") {
-            results = await this.listCategories(Object.assign(Object.assign({}, data), { orderBy, orderDirection }));
+            results = await this.listCategories(Object.assign(Object.assign({}, data), { orderBy, orderDirection }), customerUserId);
         }
         else if (intent === "list_collections") {
             results = await this.listCollections(Object.assign(Object.assign({}, data), { orderBy,
-                orderDirection }));
+                orderDirection }), customerUserId);
         }
         else if (intent === "list_colors") {
-            results = await this.listColors(Object.assign(Object.assign({}, data), { orderBy, orderDirection }));
+            results = await this.listColors(Object.assign(Object.assign({}, data), { orderBy, orderDirection }), customerUserId);
         }
         else if (intent === "list_trend") {
-            results = await this.listTrends();
+            results = await this.listTrends(customerUserId);
         }
         else {
             throw Error("Sorry, I can only assist you with flowers, bouquets, categories, collections, or colors. Please rephrase your question!");
@@ -266,22 +276,37 @@ let AIService = class AIService {
             params: aiResult,
         };
     }
-    async listCategories(data) {
-        var _a, _b, _c, _d, _e, _f;
+    async listCategories(data, customerUserId) {
+        var _a, _b, _c, _d, _e, _f, _g;
         const qb = this.categoryRepository
             .createQueryBuilder("category")
             .leftJoin("category.products", "product")
             .leftJoin("product.productCollections", "productCollection")
             .leftJoin("productCollection.collection", "collection")
             .where('category."Active" = true');
-        if (((_a = data === null || data === void 0 ? void 0 : data.collections) === null || _a === void 0 ? void 0 : _a.length) > 0) {
-            qb.andWhere('collection."Name" IN (:...collections)', {
-                collections: data.collections,
+        const orWhereExpressions = [];
+        const orWhereParams = {};
+        if (((_a = data === null || data === void 0 ? void 0 : data.categories) === null || _a === void 0 ? void 0 : _a.length) > 0) {
+            data.categories.forEach((c, idx) => {
+                orWhereExpressions.push(`LOWER(category."Name") LIKE :category${idx}`);
+                orWhereParams[`category${idx}`] = `%${c.toLowerCase()}%`;
             });
         }
-        if (((_b = data === null || data === void 0 ? void 0 : data.occasions) === null || _b === void 0 ? void 0 : _b.length) > 0 || ((_c = data === null || data === void 0 ? void 0 : data.tags) === null || _c === void 0 ? void 0 : _c.length) > 0) {
+        if (((_b = data === null || data === void 0 ? void 0 : data.collections) === null || _b === void 0 ? void 0 : _b.length) > 0) {
+            data.collections.forEach((c, idx) => {
+                orWhereExpressions.push(`LOWER(collection."Name") LIKE :collection${idx}`);
+                orWhereParams[`collection${idx}`] = `%${c.toLowerCase()}%`;
+            });
+        }
+        if (((_c = data === null || data === void 0 ? void 0 : data.occasions) === null || _c === void 0 ? void 0 : _c.length) > 0 || ((_d = data === null || data === void 0 ? void 0 : data.tags) === null || _d === void 0 ? void 0 : _d.length) > 0) {
             const tags = [...(data.occasions || []), ...(data.tags || [])];
-            qb.andWhere('collection."Name" IN (:...tags)', { tags });
+            tags.forEach((tag, idx) => {
+                orWhereExpressions.push(`LOWER(collection."Name") LIKE :tag${idx}`);
+                orWhereParams[`tag${idx}`] = `%${tag.toLowerCase()}%`;
+            });
+        }
+        if (orWhereExpressions.length > 0) {
+            qb.andWhere(orWhereExpressions.join(" OR "), orWhereParams);
         }
         if (data === null || data === void 0 ? void 0 : data.minPrice) {
             qb.andWhere('product."Price" >= :minPrice', { minPrice: data.minPrice });
@@ -293,19 +318,19 @@ let AIService = class AIService {
             qb.addSelect('MIN(product."Price")', "price")
                 .groupBy('category."CategoryId"')
                 .addGroupBy('category."Name"')
-                .orderBy("price", ((_d = data.orderDirection) === null || _d === void 0 ? void 0 : _d.toUpperCase()) || "ASC");
+                .orderBy("price", ((_e = data.orderDirection) === null || _e === void 0 ? void 0 : _e.toUpperCase()) || "ASC");
         }
         else if ((data === null || data === void 0 ? void 0 : data.orderBy) === "popularity_score") {
-            qb.addSelect(`(SELECT COUNT(*) FROM "CartItems" cart WHERE cart."ProductId" = product."ProductId") + (SELECT COUNT(*) FROM "CustomerUserWishlist" wish WHERE wish."ProductId" = product."ProductId")`, "popularityScore")
+            qb.addSelect(`(SELECT COUNT(*) FROM dbo."CartItems" cart WHERE cart."ProductId" = product."ProductId") + (SELECT COUNT(*) FROM dbo."CustomerUserWishlist" wish WHERE wish."ProductId" = product."ProductId")`, "popularityScore")
                 .groupBy('category."CategoryId"')
                 .addGroupBy('category."Name"')
-                .orderBy("popularityScore", ((_e = data.orderDirection) === null || _e === void 0 ? void 0 : _e.toUpperCase()) || "DESC");
+                .orderBy("popularityScore", ((_f = data.orderDirection) === null || _f === void 0 ? void 0 : _f.toUpperCase()) || "DESC");
         }
         else if ((data === null || data === void 0 ? void 0 : data.orderBy) === "order_count") {
-            qb.addSelect(`(SELECT SUM(orderItem."Quantity") FROM "OrderItems" orderItem WHERE orderItem."ProductId" = product."ProductId")`, "orderCount")
+            qb.addSelect(`(SELECT SUM(orderItem."Quantity") FROM dbo."OrderItems" orderItem WHERE orderItem."ProductId" = product."ProductId")`, "orderCount")
                 .groupBy('category."CategoryId"')
                 .addGroupBy('category."Name"')
-                .orderBy("orderCount", ((_f = data.orderDirection) === null || _f === void 0 ? void 0 : _f.toUpperCase()) || "DESC");
+                .orderBy("orderCount", ((_g = data.orderDirection) === null || _g === void 0 ? void 0 : _g.toUpperCase()) || "DESC");
         }
         else {
             qb.groupBy('category."CategoryId"')
@@ -313,23 +338,119 @@ let AIService = class AIService {
                 .orderBy('category."SequenceId"', "ASC");
         }
         const categories = await qb.getRawMany();
-        return { categories: categories.map((c) => c.category_name || c.name) };
+        const categoryIds = categories.map((c) => { var _a; return Number((_a = c.category_CategoryId) !== null && _a !== void 0 ? _a : 0); });
+        const categoryNames = categories.map((c) => c.category_Name);
+        const tags = [
+            ...(data.categories || []),
+            ...(data.collections || []),
+            ...(data.occasions || []),
+            ...(data.tags || []),
+        ];
+        const conditionForProductFocus = {
+            active: true,
+        };
+        if (tags.length > 0) {
+            const productIds = await this.productService.advancedSearchProductIds(tags.join(" "));
+            if (productIds.length > 0) {
+                conditionForProductFocus.productId = (0, typeorm_2.In)(productIds.map((x) => Number(x)));
+            }
+        }
+        const [products, total, customerUserWishlist, discounts] = await Promise.all([
+            this.productRepository.find({
+                where: [
+                    conditionForProductFocus,
+                    {
+                        category: {
+                            categoryId: (0, typeorm_2.In)(categoryIds),
+                        },
+                    },
+                ],
+                relations: {
+                    category: { thumbnailFile: true },
+                    productCollections: { collection: true },
+                    productImages: true,
+                },
+            }),
+            this.productRepository.count({
+                where: [
+                    conditionForProductFocus,
+                    {
+                        category: {
+                            categoryId: (0, typeorm_2.In)(categoryIds),
+                        },
+                    },
+                ],
+            }),
+            this.productRepository.manager.find(CustomerUserWishlist_1.CustomerUserWishlist, {
+                where: {
+                    customerUser: {
+                        customerUserId,
+                    },
+                },
+                relations: {
+                    customerUser: true,
+                    product: true,
+                },
+            }),
+            this.productRepository.manager.find(Discounts_1.Discounts, {
+                where: {
+                    active: true,
+                },
+            }),
+        ]);
+        return {
+            categories: categoryNames,
+            products: products.map((p) => {
+                var _a, _b, _c, _d;
+                const maxDiscount = ((_a = p.discountTagsIds) !== null && _a !== void 0 ? _a : "") !== ""
+                    ? Math.max(...discounts
+                        .filter((d) => p.discountTagsIds.split(",").includes(d.discountId))
+                        .map((d) => {
+                        var _a;
+                        return d.type === "PERCENTAGE"
+                            ? (parseFloat(d.value) / 100) * Number((_a = p.price) !== null && _a !== void 0 ? _a : 0)
+                            : parseFloat(d.value);
+                    }))
+                    : 0;
+                p["discountPrice"] = (Number((_b = p.price) !== null && _b !== void 0 ? _b : 0) - maxDiscount).toString();
+                p["isSale"] =
+                    ((_c = p.discountTagsIds) === null || _c === void 0 ? void 0 : _c.length) + p.productCollections.length > 0 &&
+                        (p.productCollections.some((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId && x.collection.isSale; }) ||
+                            ((_d = p.discountTagsIds) !== null && _d !== void 0 ? _d : "").split(", ").length > 0);
+                p["iAmInterested"] = customerUserWishlist.some((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId; });
+                p["customerUserWishlist"] = customerUserWishlist.find((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId; });
+                return p;
+            }),
+            total,
+        };
     }
-    async listCollections(data) {
-        var _a, _b, _c, _d, _e, _f;
+    async listCollections(data, customerUserId) {
+        var _a, _b, _c, _d, _e, _f, _g;
         const qb = this.collectionRepository
             .createQueryBuilder("collection")
             .leftJoin("collection.productCollections", "productCollection")
             .leftJoin("productCollection.product", "product")
             .where('collection."Active" = true');
+        const orWhereExpressions = [];
+        const orWhereParams = {};
         if (((_a = data === null || data === void 0 ? void 0 : data.categories) === null || _a === void 0 ? void 0 : _a.length) > 0) {
-            qb.andWhere('product."CategoryId" IN (:...categories)', {
-                categories: data.categories,
+            data.categories.forEach((c, idx) => {
+                orWhereExpressions.push(`LOWER(category."Name") LIKE :category${idx}`);
+                orWhereParams[`category${idx}`] = `%${c.toLowerCase()}%`;
             });
         }
-        if (((_b = data === null || data === void 0 ? void 0 : data.occasions) === null || _b === void 0 ? void 0 : _b.length) > 0 || ((_c = data === null || data === void 0 ? void 0 : data.tags) === null || _c === void 0 ? void 0 : _c.length) > 0) {
+        if (((_b = data === null || data === void 0 ? void 0 : data.collections) === null || _b === void 0 ? void 0 : _b.length) > 0) {
+            data.collections.forEach((c, idx) => {
+                orWhereExpressions.push(`LOWER(collection."Name") LIKE :collection${idx}`);
+                orWhereParams[`collection${idx}`] = `%${c.toLowerCase()}%`;
+            });
+        }
+        if (((_c = data === null || data === void 0 ? void 0 : data.occasions) === null || _c === void 0 ? void 0 : _c.length) > 0 || ((_d = data === null || data === void 0 ? void 0 : data.tags) === null || _d === void 0 ? void 0 : _d.length) > 0) {
             const tags = [...(data.occasions || []), ...(data.tags || [])];
-            qb.andWhere('collection."Name" IN (:...tags)', { tags });
+            tags.forEach((tag, idx) => {
+                orWhereExpressions.push(`LOWER(collection."Name") LIKE :tag${idx}`);
+                orWhereParams[`tag${idx}`] = `%${tag.toLowerCase()}%`;
+            });
         }
         if (data === null || data === void 0 ? void 0 : data.minPrice) {
             qb.andWhere('product."Price" >= :minPrice', { minPrice: data.minPrice });
@@ -341,19 +462,19 @@ let AIService = class AIService {
             qb.addSelect('MIN(product."Price")', "price")
                 .groupBy('collection."CollectionId"')
                 .addGroupBy('collection."Name"')
-                .orderBy("price", ((_d = data.orderDirection) === null || _d === void 0 ? void 0 : _d.toUpperCase()) || "ASC");
+                .orderBy("price", ((_e = data.orderDirection) === null || _e === void 0 ? void 0 : _e.toUpperCase()) || "ASC");
         }
         else if ((data === null || data === void 0 ? void 0 : data.orderBy) === "popularity_score") {
-            qb.addSelect(`(SELECT COUNT(*) FROM "CartItems" cart WHERE cart."ProductId" = product."ProductId") + (SELECT COUNT(*) FROM "CustomerUserWishlist" wish WHERE wish."ProductId" = product."ProductId")`, "popularityScore")
+            qb.addSelect(`(SELECT COUNT(*) FROM dbo."CartItems" cart WHERE cart."ProductId" = product."ProductId") + (SELECT COUNT(*) FROM dbo."CustomerUserWishlist" wish WHERE wish."ProductId" = product."ProductId")`, "popularityScore")
                 .groupBy('collection."CollectionId"')
                 .addGroupBy('collection."Name"')
-                .orderBy("popularityScore", ((_e = data.orderDirection) === null || _e === void 0 ? void 0 : _e.toUpperCase()) || "DESC");
+                .orderBy("popularityScore", ((_f = data.orderDirection) === null || _f === void 0 ? void 0 : _f.toUpperCase()) || "DESC");
         }
         else if ((data === null || data === void 0 ? void 0 : data.orderBy) === "order_count") {
-            qb.addSelect(`(SELECT SUM(orderItem."Quantity") FROM "OrderItems" orderItem WHERE orderItem."ProductId" = product."ProductId")`, "orderCount")
+            qb.addSelect(`(SELECT SUM(orderItem."Quantity") FROM dbo."OrderItems" orderItem WHERE orderItem."ProductId" = product."ProductId")`, "orderCount")
                 .groupBy('collection."CollectionId"')
                 .addGroupBy('collection."Name"')
-                .orderBy("orderCount", ((_f = data.orderDirection) === null || _f === void 0 ? void 0 : _f.toUpperCase()) || "DESC");
+                .orderBy("orderCount", ((_g = data.orderDirection) === null || _g === void 0 ? void 0 : _g.toUpperCase()) || "DESC");
         }
         else {
             qb.groupBy('collection."CollectionId"')
@@ -361,9 +482,93 @@ let AIService = class AIService {
                 .orderBy('collection."SequenceId"', "ASC");
         }
         const collections = await qb.getRawMany();
-        return { collections: collections.map((c) => c.collection_name || c.name) };
+        const collectionIds = collections.map((c) => { var _a; return Number((_a = c.collection_CollectionId) !== null && _a !== void 0 ? _a : 0); });
+        const collectionNames = collections.map((c) => c.collection_Name);
+        const tags = [
+            ...(data.categories || []),
+            ...(data.collections || []),
+            ...(data.occasions || []),
+            ...(data.tags || []),
+        ];
+        const conditionForProductFocus = {
+            active: true,
+        };
+        if (tags.length > 0) {
+            const productIds = await this.productService.advancedSearchProductIds(tags.join(" "));
+            if (productIds.length > 0) {
+                conditionForProductFocus.productId = (0, typeorm_2.In)(productIds.map((x) => Number(x)));
+            }
+        }
+        const [products, total, customerUserWishlist, discounts] = await Promise.all([
+            this.productRepository.find({
+                where: [
+                    conditionForProductFocus,
+                    {
+                        category: {
+                            categoryId: (0, typeorm_2.In)(collectionIds),
+                        },
+                    },
+                ],
+                relations: {
+                    category: { thumbnailFile: true },
+                    productCollections: { collection: true },
+                    productImages: true,
+                },
+            }),
+            this.productRepository.count({
+                where: [
+                    conditionForProductFocus,
+                    {
+                        category: {
+                            categoryId: (0, typeorm_2.In)(collectionIds),
+                        },
+                    },
+                ],
+            }),
+            this.productRepository.manager.find(CustomerUserWishlist_1.CustomerUserWishlist, {
+                where: {
+                    customerUser: {
+                        customerUserId,
+                    },
+                },
+                relations: {
+                    customerUser: true,
+                    product: true,
+                },
+            }),
+            this.productRepository.manager.find(Discounts_1.Discounts, {
+                where: {
+                    active: true,
+                },
+            }),
+        ]);
+        return {
+            collections: collectionNames,
+            products: products.map((p) => {
+                var _a, _b, _c, _d;
+                const maxDiscount = ((_a = p.discountTagsIds) !== null && _a !== void 0 ? _a : "") !== ""
+                    ? Math.max(...discounts
+                        .filter((d) => p.discountTagsIds.split(",").includes(d.discountId))
+                        .map((d) => {
+                        var _a;
+                        return d.type === "PERCENTAGE"
+                            ? (parseFloat(d.value) / 100) * Number((_a = p.price) !== null && _a !== void 0 ? _a : 0)
+                            : parseFloat(d.value);
+                    }))
+                    : 0;
+                p["discountPrice"] = (Number((_b = p.price) !== null && _b !== void 0 ? _b : 0) - maxDiscount).toString();
+                p["isSale"] =
+                    ((_c = p.discountTagsIds) === null || _c === void 0 ? void 0 : _c.length) + p.productCollections.length > 0 &&
+                        (p.productCollections.some((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId && x.collection.isSale; }) ||
+                            ((_d = p.discountTagsIds) !== null && _d !== void 0 ? _d : "").split(", ").length > 0);
+                p["iAmInterested"] = customerUserWishlist.some((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId; });
+                p["customerUserWishlist"] = customerUserWishlist.find((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId; });
+                return p;
+            }),
+            total,
+        };
     }
-    async listColors(data) {
+    async listColors(data, customerUserId) {
         var _a, _b, _c, _d, _e, _f, _g;
         const qb = this.productRepository
             .createQueryBuilder("product")
@@ -372,19 +577,29 @@ let AIService = class AIService {
             .leftJoin("product.category", "category")
             .where('product."Active" = true')
             .andWhere('product."Color" IS NOT NULL');
-        if (((_a = data === null || data === void 0 ? void 0 : data.collections) === null || _a === void 0 ? void 0 : _a.length) > 0) {
-            qb.andWhere('collection."Name" IN (:...collections)', {
-                collections: data.collections,
+        const orWhereExpressions = [];
+        const orWhereParams = {};
+        if (((_a = data === null || data === void 0 ? void 0 : data.categories) === null || _a === void 0 ? void 0 : _a.length) > 0) {
+            data.categories.forEach((c, idx) => {
+                orWhereExpressions.push(`LOWER(category."Name") LIKE :category${idx}`);
+                orWhereParams[`category${idx}`] = `%${c.toLowerCase()}%`;
             });
         }
-        if (((_b = data === null || data === void 0 ? void 0 : data.categories) === null || _b === void 0 ? void 0 : _b.length) > 0) {
-            qb.andWhere('category."Name" IN (:...categories)', {
-                categories: data.categories,
+        if (((_b = data === null || data === void 0 ? void 0 : data.collections) === null || _b === void 0 ? void 0 : _b.length) > 0) {
+            data.collections.forEach((c, idx) => {
+                orWhereExpressions.push(`LOWER(collection."Name") LIKE :collection${idx}`);
+                orWhereParams[`collection${idx}`] = `%${c.toLowerCase()}%`;
             });
         }
-        if (((_c = data === null || data === void 0 ? void 0 : data.tags) === null || _c === void 0 ? void 0 : _c.length) > 0 || ((_d = data === null || data === void 0 ? void 0 : data.occasions) === null || _d === void 0 ? void 0 : _d.length) > 0) {
-            const tags = [...(data.tags || []), ...(data.occasions || [])];
-            qb.andWhere('collection."Name" IN (:...tags)', { tags });
+        if (((_c = data === null || data === void 0 ? void 0 : data.occasions) === null || _c === void 0 ? void 0 : _c.length) > 0 || ((_d = data === null || data === void 0 ? void 0 : data.tags) === null || _d === void 0 ? void 0 : _d.length) > 0) {
+            const tags = [...(data.occasions || []), ...(data.tags || [])];
+            tags.forEach((tag, idx) => {
+                orWhereExpressions.push(`LOWER(collection."Name") LIKE :tag${idx}`);
+                orWhereParams[`tag${idx}`] = `%${tag.toLowerCase()}%`;
+            });
+        }
+        if (orWhereExpressions.length > 0) {
+            qb.andWhere(orWhereExpressions.join(" OR "), orWhereParams);
         }
         if (data === null || data === void 0 ? void 0 : data.minPrice) {
             qb.andWhere('product."Price" >= :minPrice', { minPrice: data.minPrice });
@@ -395,46 +610,46 @@ let AIService = class AIService {
         if ((data === null || data === void 0 ? void 0 : data.orderBy) === "price") {
             qb.addSelect('MIN(product."Price")', "price")
                 .groupBy('product."Color"')
+                .addGroupBy('product."ProductId"')
                 .orderBy("price", ((_e = data.orderDirection) === null || _e === void 0 ? void 0 : _e.toUpperCase()) || "ASC");
         }
         else if ((data === null || data === void 0 ? void 0 : data.orderBy) === "popularity_score") {
-            qb.addSelect(`(SELECT COUNT(*) FROM "CartItems" cart WHERE cart."ProductId" = product."ProductId") + (SELECT COUNT(*) FROM "CustomerUserWishlist" wish WHERE wish."ProductId" = product."ProductId")`, "popularityScore")
+            qb.addSelect(`(SELECT COUNT(*) FROM dbo."CartItems" cart WHERE cart."ProductId" = product."ProductId") + product."Interested"`, "popularityScore")
                 .groupBy('product."Color"')
-                .orderBy("popularityScore", ((_f = data.orderDirection) === null || _f === void 0 ? void 0 : _f.toUpperCase()) || "DESC");
+                .addGroupBy('product."ProductId"')
+                .orderBy(`product."Interested"`, ((_f = data.orderDirection) === null || _f === void 0 ? void 0 : _f.toUpperCase()) || "DESC");
         }
         else if ((data === null || data === void 0 ? void 0 : data.orderBy) === "order_count") {
-            qb.addSelect(`(SELECT SUM(orderItem."Quantity") FROM "OrderItems" orderItem WHERE orderItem."ProductId" = product."ProductId")`, "orderCount")
+            qb.addSelect(`(SELECT SUM(orderItem."Quantity") FROM dbo."OrderItems" orderItem WHERE orderItem."ProductId" = product."ProductId")`, "orderCount")
                 .groupBy('product."Color"')
+                .addGroupBy('product."ProductId"')
                 .orderBy("orderCount", ((_g = data.orderDirection) === null || _g === void 0 ? void 0 : _g.toUpperCase()) || "DESC");
         }
-        else {
-            qb.groupBy('product."Color"');
-        }
-        const colorsResult = await qb.getRawMany();
-        return {
-            colors: colorsResult.map((c) => c.color),
+        const colors = await qb.getRawMany();
+        const colorNames = colors.map((c) => c.product_Color);
+        const tags = [
+            ...(data.categories || []),
+            ...(data.collections || []),
+            ...(data.occasions || []),
+            ...(data.tags || []),
+        ];
+        const conditionForProductFocus = {
+            active: true,
         };
-    }
-    async searchProducts(data) {
-        const condition = { active: true };
-        if (data.productName) {
-            condition.name = (0, typeorm_2.ILike)(`%${data.productName}%`);
+        if (tags.length > 0) {
+            const productIds = await this.productService.advancedSearchProductIds(tags.join(" "));
+            if (productIds.length > 0) {
+                conditionForProductFocus.productId = (0, typeorm_2.In)(productIds.map((x) => Number(x)));
+            }
         }
-        if (data.category) {
-            condition.category = { name: (0, typeorm_2.ILike)(`%${data.category}%`) };
-        }
-        if (data.price) {
-            condition.price = data.price;
-        }
-        if (data.maxPrice) {
-            condition.price = Object.assign(Object.assign({}, (condition.price || {})), { lte: data.maxPrice });
-        }
-        if (data.minPrice) {
-            condition.price = Object.assign(Object.assign({}, (condition.price || {})), { gte: data.minPrice });
-        }
-        const [products, total] = await Promise.all([
+        const [products, total, customerUserWishlist, discounts] = await Promise.all([
             this.productRepository.find({
-                where: condition,
+                where: [
+                    conditionForProductFocus,
+                    {
+                        color: (0, typeorm_2.In)(colorNames),
+                    },
+                ],
                 relations: {
                     category: { thumbnailFile: true },
                     productCollections: { collection: true },
@@ -442,17 +657,175 @@ let AIService = class AIService {
                 },
             }),
             this.productRepository.count({
-                where: condition,
+                where: [
+                    conditionForProductFocus,
+                    {
+                        color: (0, typeorm_2.In)(colorNames),
+                    },
+                ],
+            }),
+            this.productRepository.manager.find(CustomerUserWishlist_1.CustomerUserWishlist, {
+                where: {
+                    customerUser: {
+                        customerUserId,
+                    },
+                },
+                relations: {
+                    customerUser: true,
+                    product: true,
+                },
+            }),
+            this.productRepository.manager.find(Discounts_1.Discounts, {
+                where: {
+                    active: true,
+                },
             }),
         ]);
-        const suggestions = await this.generateSuggestionsHybridAndNonHybrid(data);
         return {
-            result: products,
+            colors: colorNames,
+            products: products.map((p) => {
+                var _a, _b, _c, _d;
+                const maxDiscount = ((_a = p.discountTagsIds) !== null && _a !== void 0 ? _a : "") !== ""
+                    ? Math.max(...discounts
+                        .filter((d) => p.discountTagsIds.split(",").includes(d.discountId))
+                        .map((d) => {
+                        var _a;
+                        return d.type === "PERCENTAGE"
+                            ? (parseFloat(d.value) / 100) * Number((_a = p.price) !== null && _a !== void 0 ? _a : 0)
+                            : parseFloat(d.value);
+                    }))
+                    : 0;
+                p["discountPrice"] = (Number((_b = p.price) !== null && _b !== void 0 ? _b : 0) - maxDiscount).toString();
+                p["isSale"] =
+                    ((_c = p.discountTagsIds) === null || _c === void 0 ? void 0 : _c.length) + p.productCollections.length > 0 &&
+                        (p.productCollections.some((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId && x.collection.isSale; }) ||
+                            ((_d = p.discountTagsIds) !== null && _d !== void 0 ? _d : "").split(", ").length > 0);
+                p["iAmInterested"] = customerUserWishlist.some((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId; });
+                p["customerUserWishlist"] = customerUserWishlist.find((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId; });
+                return p;
+            }),
+            total,
+        };
+    }
+    async searchProducts(data, customerUserId) {
+        var _a, _b;
+        const conditionForProductFocus = { active: true };
+        const conditionCategoryFocus = { active: true };
+        const productIds = await this.productService.advancedSearchProductIds((_a = data.productName) !== null && _a !== void 0 ? _a : "");
+        const categoryIds = await this.categoryService.advancedSearchCategoryIds((_b = data.category) !== null && _b !== void 0 ? _b : "");
+        if (productIds.length > 0) {
+            conditionForProductFocus.productId = (0, typeorm_2.In)(productIds.map((x) => Number(x)));
+        }
+        if (categoryIds.length > 0) {
+            conditionCategoryFocus.category = {
+                categoryId: (0, typeorm_2.In)(categoryIds.map((x) => Number(x))),
+                active: true,
+            };
+        }
+        if (data.category) {
+            conditionForProductFocus.category = {
+                name: (0, typeorm_2.ILike)(`%${data.category}%`),
+                active: true,
+            };
+            conditionCategoryFocus.category = { name: (0, typeorm_2.ILike)(`%${data.category}%`) };
+        }
+        if (data.price && !isNaN(Number(data.price)) && Number(data.price) > 0) {
+            if (data.maxPrice &&
+                !isNaN(Number(data.maxPrice)) &&
+                Number(data.maxPrice) > 0) {
+                data.maxPrice = Math.max(Number(data.price), Number(data.maxPrice));
+            }
+            else {
+                data.maxPrice = Number(data.price);
+            }
+            if (data.minPrice &&
+                !isNaN(Number(data.minPrice)) &&
+                Number(data.minPrice) > 0) {
+                data.minPrice = Math.max(Number(data.price), Number(data.minPrice));
+            }
+            else {
+                data.minPrice = Number(data.price);
+            }
+        }
+        else {
+            if (data.maxPrice &&
+                !isNaN(Number(data.maxPrice)) &&
+                Number(data.maxPrice) > 0) {
+                data.maxPrice = Number(data.maxPrice);
+            }
+            if (data.minPrice &&
+                !isNaN(Number(data.minPrice)) &&
+                Number(data.minPrice) > 0) {
+                data.minPrice = Number(data.minPrice);
+            }
+        }
+        if (data.minPrice === data.maxPrice) {
+            conditionForProductFocus.price = (0, typeorm_2.Between)(0, Number(data.maxPrice));
+            conditionCategoryFocus.price = (0, typeorm_2.Between)(0, Number(data.maxPrice));
+        }
+        else {
+            conditionForProductFocus.price = (0, typeorm_2.Between)(Number(data.minPrice), Number(data.maxPrice));
+            conditionCategoryFocus.price = (0, typeorm_2.Between)(Number(data.minPrice), Number(data.maxPrice));
+        }
+        const [products, total, customerUserWishlist, discounts] = await Promise.all([
+            this.productRepository.find({
+                where: [conditionForProductFocus, conditionCategoryFocus],
+                relations: {
+                    category: { thumbnailFile: true },
+                    productCollections: { collection: true },
+                    productImages: {
+                        file: true,
+                    },
+                },
+            }),
+            this.productRepository.count({
+                where: [conditionForProductFocus, conditionCategoryFocus],
+            }),
+            this.productRepository.manager.find(CustomerUserWishlist_1.CustomerUserWishlist, {
+                where: {
+                    customerUser: {
+                        customerUserId,
+                    },
+                },
+                relations: {
+                    customerUser: true,
+                    product: true,
+                },
+            }),
+            this.productRepository.manager.find(Discounts_1.Discounts, {
+                where: {
+                    active: true,
+                },
+            }),
+        ]);
+        const suggestions = await this.generateSuggestionsHybridAndNonHybrid(data, customerUserId);
+        return {
+            products: products.map((p) => {
+                var _a, _b, _c, _d;
+                const maxDiscount = ((_a = p.discountTagsIds) !== null && _a !== void 0 ? _a : "") !== ""
+                    ? Math.max(...discounts
+                        .filter((d) => p.discountTagsIds.split(",").includes(d.discountId))
+                        .map((d) => {
+                        var _a;
+                        return d.type === "PERCENTAGE"
+                            ? (parseFloat(d.value) / 100) * Number((_a = p.price) !== null && _a !== void 0 ? _a : 0)
+                            : parseFloat(d.value);
+                    }))
+                    : 0;
+                p["discountPrice"] = (Number((_b = p.price) !== null && _b !== void 0 ? _b : 0) - maxDiscount).toString();
+                p["isSale"] =
+                    ((_c = p.discountTagsIds) === null || _c === void 0 ? void 0 : _c.length) + p.productCollections.length > 0 &&
+                        (p.productCollections.some((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId && x.collection.isSale; }) ||
+                            ((_d = p.discountTagsIds) !== null && _d !== void 0 ? _d : "").split(", ").length > 0);
+                p["iAmInterested"] = customerUserWishlist.some((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId; });
+                p["customerUserWishlist"] = customerUserWishlist.find((x) => { var _a; return ((_a = x.product) === null || _a === void 0 ? void 0 : _a.productId) === p.productId; });
+                return p;
+            }),
             total,
             suggestions,
         };
     }
-    async generateSuggestionsHybridAndNonHybrid(data) {
+    async generateSuggestionsHybridAndNonHybrid(data, customerUserId) {
         const hybridSuggestions = {};
         if (data.collections && data.collections.length > 0) {
             const availableCollections = await this.collectionRepository.find({
@@ -464,14 +837,25 @@ let AIService = class AIService {
             hybridSuggestions.relatedCollections = availableCollections.map((c) => c.name);
         }
         if (data.color && data.color.length > 0) {
-            const availableColors = await this.productRepository.find({
-                where: {
-                    active: true,
-                    shortDesc: data.color,
-                },
-                select: ["shortDesc"],
-            });
-            hybridSuggestions.availableColors = availableColors.map((c) => c.shortDesc);
+            const availableColors = await this.productRepository
+                .createQueryBuilder("product")
+                .select(["product.color"])
+                .where("product.active = :active", { active: true })
+                .andWhere(data.color && data.color.length > 0
+                ? `(${data.color
+                    .map((_, idx) => `(LOWER(product."Color") LIKE :color${idx} OR LOWER(product."Name") LIKE :color${idx} OR LOWER(product."ShortDesc") LIKE :color${idx} OR LOWER(product."LongDesc") LIKE :color${idx})`)
+                    .join(" OR ")})`
+                : "1=1", data.color && data.color.length > 0
+                ? Object.fromEntries(data.color.map((c, idx) => [
+                    `color${idx}`,
+                    `%${c.toLowerCase()}%`,
+                ]))
+                : {})
+                .getRawMany();
+            const colorSet = new Set((data.color || []).map((c) => c.trim().toLowerCase()));
+            hybridSuggestions.availableColors = Array.from(new Set(availableColors
+                .map((c) => c.product_Color)
+                .filter((color) => color && colorSet.has(color.trim().toLowerCase()))));
         }
         const [hotPicksRaw, bestSellersRaw] = await Promise.all([
             this.productRepository
@@ -479,19 +863,17 @@ let AIService = class AIService {
                 .leftJoin(CartItems_1.CartItems, "cart", '"cart"."ProductId" = "product"."ProductId"')
                 .leftJoin(CustomerUserWishlist_1.CustomerUserWishlist, "wishlist", '"wishlist"."ProductId" = "product"."ProductId"')
                 .select('"product"."ProductId"', "productId")
-                .addSelect('"product"."Name"', "name")
-                .addSelect('COUNT("cart"."CartItemId") + COUNT("wishlist"."CustomerUserWishlist")', "popularityScore")
+                .addSelect('COUNT("cart"."CartItemId") + COUNT("wishlist"."CustomerUserWishlistId")', "popularityScore")
                 .where('"product"."Active" = true')
                 .groupBy('"product"."ProductId"')
                 .addGroupBy('"product"."Name"')
-                .orderBy('COUNT("cart"."CartItemId") + COUNT("wishlist"."CustomerUserWishlist")', "DESC")
+                .orderBy('COUNT("cart"."CartItemId") + COUNT("wishlist"."CustomerUserWishlistId")', "DESC")
                 .limit(5)
                 .getRawMany(),
             this.productRepository
                 .createQueryBuilder("product")
                 .leftJoin(OrderItems_1.OrderItems, "orderItem", '"orderItem"."ProductId" = "product"."ProductId"')
                 .select('"product"."ProductId"', "productId")
-                .addSelect('"product"."Name"', "name")
                 .addSelect('SUM("orderItem"."Quantity")', "orderCount")
                 .where('"product"."Active" = true')
                 .groupBy('"product"."ProductId"')
@@ -507,35 +889,37 @@ let AIService = class AIService {
                     .filter((p) => p.popularityScore !== null && parseInt(p.popularityScore, 10) > 0)
                     .map((p) => ({
                     productId: p.productId,
-                    name: p.name,
                     popularityScore: parseInt(p.popularityScore, 10),
                 })),
                 bestSellers: bestSellersRaw
                     .filter((p) => p.orderCount !== null && parseInt(p.orderCount, 10) > 0)
                     .map((p) => ({
                     productId: p.productId,
-                    name: p.name,
                     totalOrders: parseInt(p.orderCount, 10),
                 })),
             },
         };
     }
-    async listTrends() {
-        const { nonHybridSuggestions } = await this.generateSuggestionsHybridAndNonHybrid({});
+    async listTrends(customerUserId) {
+        const { nonHybridSuggestions } = await this.generateSuggestionsHybridAndNonHybrid({}, customerUserId);
         return nonHybridSuggestions;
     }
 };
 AIService = __decorate([
     (0, common_1.Injectable)(),
-    __param(2, (0, typeorm_1.InjectRepository)(Product_1.Product)),
-    __param(3, (0, typeorm_1.InjectRepository)(Category_1.Category)),
-    __param(4, (0, typeorm_1.InjectRepository)(Collection_1.Collection)),
-    __param(5, (0, typeorm_1.InjectRepository)(ProductCollection_1.ProductCollection)),
-    __param(6, (0, typeorm_1.InjectRepository)(OrderItems_1.OrderItems)),
-    __param(7, (0, typeorm_1.InjectRepository)(CartItems_1.CartItems)),
-    __param(8, (0, typeorm_1.InjectRepository)(CustomerUserWishlist_1.CustomerUserWishlist)),
+    __param(4, (0, typeorm_1.InjectRepository)(Product_1.Product)),
+    __param(5, (0, typeorm_1.InjectRepository)(Category_1.Category)),
+    __param(6, (0, typeorm_1.InjectRepository)(Collection_1.Collection)),
+    __param(7, (0, typeorm_1.InjectRepository)(ProductCollection_1.ProductCollection)),
+    __param(8, (0, typeorm_1.InjectRepository)(OrderItems_1.OrderItems)),
+    __param(9, (0, typeorm_1.InjectRepository)(CartItems_1.CartItems)),
+    __param(10, (0, typeorm_1.InjectRepository)(CustomerUserWishlist_1.CustomerUserWishlist)),
+    __param(11, (0, typeorm_1.InjectRepository)(CustomerUserAiSearch_1.CustomerUserAiSearch)),
     __metadata("design:paramtypes", [config_1.ConfigService,
+        product_service_1.ProductService,
+        category_service_1.CategoryService,
         axios_1.HttpService,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,

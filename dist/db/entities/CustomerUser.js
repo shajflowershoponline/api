@@ -13,6 +13,7 @@ exports.CustomerUser = void 0;
 const typeorm_1 = require("typeorm");
 const CartItems_1 = require("./CartItems");
 const CustomerCoupon_1 = require("./CustomerCoupon");
+const CustomerUserAiSearch_1 = require("./CustomerUserAiSearch");
 const CustomerUserWishlist_1 = require("./CustomerUserWishlist");
 const Order_1 = require("./Order");
 let CustomerUser = class CustomerUser {
@@ -73,6 +74,10 @@ __decorate([
     (0, typeorm_1.OneToMany)(() => CustomerCoupon_1.CustomerCoupon, (customerCoupon) => customerCoupon.customerUser),
     __metadata("design:type", Array)
 ], CustomerUser.prototype, "customerCoupons", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => CustomerUserAiSearch_1.CustomerUserAiSearch, (customerUserAiSearch) => customerUserAiSearch.customerUser),
+    __metadata("design:type", Array)
+], CustomerUser.prototype, "customerUserAiSearches", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => CustomerUserWishlist_1.CustomerUserWishlist, (customerUserWishlist) => customerUserWishlist.customerUser),
     __metadata("design:type", Array)

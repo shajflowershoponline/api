@@ -36,8 +36,9 @@ export declare class ProductService {
         results: Product[];
         total: number;
     }>;
-    getSearchFilter({ columnDef }: {
+    getSearchFilter({ columnDef, keyword }: {
         columnDef: any;
+        keyword: any;
     }): Promise<{
         colors: {
             name: string;

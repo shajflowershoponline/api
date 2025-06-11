@@ -29,15 +29,16 @@ export class AIController {
     schema: {
       type: "object",
       properties: {
+        customerUserId: { type: "string" },
         query: { type: "string", example: "red roses bouquet" },
       },
       required: ["query"],
     },
   })
-  async create(@Body() dto: { query: string }) {
+  async create(@Body() dto: { query: string; customerUserId: string }) {
     const res: ApiResponseModel<any> = {} as any;
     try {
-      res.data = await this.aiService.handleSearch(dto.query);
+      res.data = await this.aiService.handleSearch(dto);
       res.success = true;
       res.message = `Query ${dto.query}`;
       return res;

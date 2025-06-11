@@ -21,6 +21,9 @@ const CartItems_1 = require("../../db/entities/CartItems");
 const Order_1 = require("../../db/entities/Order");
 const OrderItems_1 = require("../../db/entities/OrderItems");
 const CustomerUserWishlist_1 = require("../../db/entities/CustomerUserWishlist");
+const product_service_1 = require("../../services/product.service");
+const category_service_1 = require("../../services/category.service");
+const CustomerUserAiSearch_1 = require("../../db/entities/CustomerUserAiSearch");
 let AIModule = class AIModule {
 };
 AIModule = __decorate([
@@ -36,11 +39,12 @@ AIModule = __decorate([
                 CartItems_1.CartItems,
                 Order_1.Order,
                 OrderItems_1.OrderItems,
-                CustomerUserWishlist_1.CustomerUserWishlist
+                CustomerUserWishlist_1.CustomerUserWishlist,
+                CustomerUserAiSearch_1.CustomerUserAiSearch
             ]),
         ],
         controllers: [ai_controller_1.AIController],
-        providers: [ai_service_1.AIService],
+        providers: [ai_service_1.AIService, product_service_1.ProductService, category_service_1.CategoryService],
         exports: [ai_service_1.AIService],
     })
 ], AIModule);

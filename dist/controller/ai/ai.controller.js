@@ -23,7 +23,7 @@ let AIController = class AIController {
     async create(dto) {
         const res = {};
         try {
-            res.data = await this.aiService.handleSearch(dto.query);
+            res.data = await this.aiService.handleSearch(dto);
             res.success = true;
             res.message = `Query ${dto.query}`;
             return res;
@@ -43,6 +43,7 @@ __decorate([
         schema: {
             type: "object",
             properties: {
+                customerUserId: { type: "string" },
                 query: { type: "string", example: "red roses bouquet" },
             },
             required: ["query"],

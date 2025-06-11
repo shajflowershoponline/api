@@ -27,7 +27,7 @@ let ProductController = class ProductController {
     async getAllFeaturedProducts(customerUserId) {
         const res = {};
         try {
-            res.data = await this.productService.getAllFeaturedProducts(customerUserId);
+            res.data = await this.productService.getAllFeaturedProducts(customerUserId !== null && customerUserId !== void 0 ? customerUserId : "");
             res.success = true;
             return res;
         }
@@ -192,6 +192,7 @@ __decorate([
         schema: {
             type: "object",
             properties: {
+                keyword: { type: "string" },
                 columnDef: {
                     type: "array",
                     items: {
