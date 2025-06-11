@@ -39,7 +39,7 @@ export class AIService {
     private readonly wishlistRepository: Repository<CustomerUserWishlist>,
     @InjectRepository(CustomerUserAiSearch)
     private readonly customerUserAiSearchRepository: Repository<CustomerUserAiSearch>
-  ) {}
+  ) { }
 
   private async buildPrompt(userQuery: string): Promise<string> {
     const categoryNames = this.config.get<string>("FLOWER_TYPES");
@@ -72,7 +72,8 @@ export class AIService {
     - NEVER output price as { "lte": 700 }. Only use numbers like "price": 700.
     - If user says "under 700", use "maxPrice": 700.
     - If user says "over 500", use "minPrice": 500.
-    ---
+    - ⚠️ Only include "maxPrice" or "minPrice" if user explicitly mentions a price preference.
+    - 🚨 If the user DID NOT mention any price preference, DO NOT add "maxPrice" or "minPrice" — leave them out completely.
 
     Order Preferences Detection:
 
@@ -265,6 +266,10 @@ export class AIService {
     const { intent, data, orderBy, orderDirection } = aiResult;
 
     let results = null;
+    if (data?.maxPrice === undefined && data?.minPrice === undefined) {
+      data.maxPrice = 10000;
+      data.minPrice = 0;
+    }
     if (intent === "search_product") {
       results = await this.searchProducts(data, customerUserId);
     } else if (intent === "list_categories") {
@@ -459,16 +464,16 @@ export class AIService {
         const maxDiscount =
           (p.discountTagsIds ?? "") !== ""
             ? Math.max(
-                ...discounts
-                  .filter((d) =>
-                    p.discountTagsIds.split(",").includes(d.discountId)
-                  )
-                  .map((d) =>
-                    d.type === "PERCENTAGE"
-                      ? (parseFloat(d.value) / 100) * Number(p.price ?? 0)
-                      : parseFloat(d.value)
-                  )
-              )
+              ...discounts
+                .filter((d) =>
+                  p.discountTagsIds.split(",").includes(d.discountId)
+                )
+                .map((d) =>
+                  d.type === "PERCENTAGE"
+                    ? (parseFloat(d.value) / 100) * Number(p.price ?? 0)
+                    : parseFloat(d.value)
+                )
+            )
             : 0;
         p["discountPrice"] = (Number(p.price ?? 0) - maxDiscount).toString();
         p["isSale"] =
@@ -640,16 +645,16 @@ export class AIService {
         const maxDiscount =
           (p.discountTagsIds ?? "") !== ""
             ? Math.max(
-                ...discounts
-                  .filter((d) =>
-                    p.discountTagsIds.split(",").includes(d.discountId)
-                  )
-                  .map((d) =>
-                    d.type === "PERCENTAGE"
-                      ? (parseFloat(d.value) / 100) * Number(p.price ?? 0)
-                      : parseFloat(d.value)
-                  )
-              )
+              ...discounts
+                .filter((d) =>
+                  p.discountTagsIds.split(",").includes(d.discountId)
+                )
+                .map((d) =>
+                  d.type === "PERCENTAGE"
+                    ? (parseFloat(d.value) / 100) * Number(p.price ?? 0)
+                    : parseFloat(d.value)
+                )
+            )
             : 0;
         p["discountPrice"] = (Number(p.price ?? 0) - maxDiscount).toString();
         p["isSale"] =
@@ -813,16 +818,16 @@ export class AIService {
         const maxDiscount =
           (p.discountTagsIds ?? "") !== ""
             ? Math.max(
-                ...discounts
-                  .filter((d) =>
-                    p.discountTagsIds.split(",").includes(d.discountId)
-                  )
-                  .map((d) =>
-                    d.type === "PERCENTAGE"
-                      ? (parseFloat(d.value) / 100) * Number(p.price ?? 0)
-                      : parseFloat(d.value)
-                  )
-              )
+              ...discounts
+                .filter((d) =>
+                  p.discountTagsIds.split(",").includes(d.discountId)
+                )
+                .map((d) =>
+                  d.type === "PERCENTAGE"
+                    ? (parseFloat(d.value) / 100) * Number(p.price ?? 0)
+                    : parseFloat(d.value)
+                )
+            )
             : 0;
         p["discountPrice"] = (Number(p.price ?? 0) - maxDiscount).toString();
         p["isSale"] =
@@ -963,16 +968,16 @@ export class AIService {
         const maxDiscount =
           (p.discountTagsIds ?? "") !== ""
             ? Math.max(
-                ...discounts
-                  .filter((d) =>
-                    p.discountTagsIds.split(",").includes(d.discountId)
-                  )
-                  .map((d) =>
-                    d.type === "PERCENTAGE"
-                      ? (parseFloat(d.value) / 100) * Number(p.price ?? 0)
-                      : parseFloat(d.value)
-                  )
-              )
+              ...discounts
+                .filter((d) =>
+                  p.discountTagsIds.split(",").includes(d.discountId)
+                )
+                .map((d) =>
+                  d.type === "PERCENTAGE"
+                    ? (parseFloat(d.value) / 100) * Number(p.price ?? 0)
+                    : parseFloat(d.value)
+                )
+            )
             : 0;
         p["discountPrice"] = (Number(p.price ?? 0) - maxDiscount).toString();
         p["isSale"] =
@@ -1020,19 +1025,19 @@ export class AIService {
         .andWhere(
           data.color && data.color.length > 0
             ? `(${data.color
-                .map(
-                  (_, idx) =>
-                    `(LOWER(product."Color") LIKE :color${idx} OR LOWER(product."Name") LIKE :color${idx} OR LOWER(product."ShortDesc") LIKE :color${idx} OR LOWER(product."LongDesc") LIKE :color${idx})`
-                )
-                .join(" OR ")})`
+              .map(
+                (_, idx) =>
+                  `(LOWER(product."Color") LIKE :color${idx} OR LOWER(product."Name") LIKE :color${idx} OR LOWER(product."ShortDesc") LIKE :color${idx} OR LOWER(product."LongDesc") LIKE :color${idx})`
+              )
+              .join(" OR ")})`
             : "1=1",
           data.color && data.color.length > 0
             ? Object.fromEntries(
-                data.color.map((c: string, idx: number) => [
-                  `color${idx}`,
-                  `%${c.toLowerCase()}%`,
-                ])
-              )
+              data.color.map((c: string, idx: number) => [
+                `color${idx}`,
+                `%${c.toLowerCase()}%`,
+              ])
+            )
             : {}
         )
         .getRawMany();

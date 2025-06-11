@@ -152,24 +152,13 @@ let ProductService = class ProductService {
         };
     }
     async getPagination({ pageSize, pageIndex, order, columnDef }) {
-        var _a;
         const skip = Number(pageIndex) > 0 ? Number(pageIndex) * Number(pageSize) : 0;
         const take = Number(pageSize);
-        const newColDef = [];
-        const collectionClDef = [];
-        for (const col of columnDef) {
-            if ((_a = col === null || col === void 0 ? void 0 : col.name) === null || _a === void 0 ? void 0 : _a.includes("collection")) {
-                collectionClDef.push(col);
-            }
-            else {
-                newColDef.push(col);
-            }
-        }
-        const condition = (0, utils_1.columnDefToTypeORMCondition)(newColDef);
-        const collectionCondition = (0, utils_1.columnDefToTypeORMCondition)(collectionClDef);
+        const condition = (0, utils_1.columnDefToTypeORMCondition)(columnDef);
+        condition.active = true;
         const [results, total] = await Promise.all([
             this.productRepo.find({
-                where: Object.assign(Object.assign({}, condition), { active: true, productCollections: collectionCondition }),
+                where: Object.assign(Object.assign({}, condition), { active: true }),
                 relations: {
                     productImages: {
                         file: true,
@@ -184,7 +173,7 @@ let ProductService = class ProductService {
                 order,
             }),
             this.productRepo.count({
-                where: Object.assign(Object.assign({}, condition), { active: true, productCollections: collectionCondition }),
+                where: Object.assign(Object.assign({}, condition), { active: true }),
             }),
         ]);
         return {

@@ -192,23 +192,13 @@ export class ProductService {
       Number(pageIndex) > 0 ? Number(pageIndex) * Number(pageSize) : 0;
     const take = Number(pageSize);
 
-    const newColDef = [];
-    const collectionClDef = [];
-    for (const col of columnDef) {
-      if (col?.name?.includes("collection")) {
-        collectionClDef.push(col);
-      } else {
-        newColDef.push(col);
-      }
-    }
-    const condition = columnDefToTypeORMCondition(newColDef);
-    const collectionCondition = columnDefToTypeORMCondition(collectionClDef);
+    const condition = columnDefToTypeORMCondition(columnDef);
+    condition.active = true;
     const [results, total] = await Promise.all([
       this.productRepo.find({
         where: {
           ...condition,
           active: true,
-          productCollections: collectionCondition,
         },
         relations: {
           productImages: {
@@ -227,7 +217,6 @@ export class ProductService {
         where: {
           ...condition,
           active: true,
-          productCollections: collectionCondition,
         },
       }),
     ]);

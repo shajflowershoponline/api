@@ -75,7 +75,8 @@ let AIService = class AIService {
     - NEVER output price as { "lte": 700 }. Only use numbers like "price": 700.
     - If user says "under 700", use "maxPrice": 700.
     - If user says "over 500", use "minPrice": 500.
-    ---
+    - ⚠️ Only include "maxPrice" or "minPrice" if user explicitly mentions a price preference.
+    - 🚨 If the user DID NOT mention any price preference, DO NOT add "maxPrice" or "minPrice" — leave them out completely.
 
     Order Preferences Detection:
 
@@ -252,6 +253,10 @@ let AIService = class AIService {
         }
         const { intent, data, orderBy, orderDirection } = aiResult;
         let results = null;
+        if ((data === null || data === void 0 ? void 0 : data.maxPrice) === undefined && (data === null || data === void 0 ? void 0 : data.minPrice) === undefined) {
+            data.maxPrice = 10000;
+            data.minPrice = 0;
+        }
         if (intent === "search_product") {
             results = await this.searchProducts(data, customerUserId);
         }

@@ -59,9 +59,16 @@ export class CategoryService {
   }
 
   async getPagination({ pageSize, pageIndex, order, keywords }) {
-    const skip =
-      Number(pageIndex) > 0 ? Number(pageIndex) * Number(pageSize) : 0;
-    const take = Number(pageSize);
+    let skip = 0;
+    let take = Number(pageSize);
+
+    if (Number(pageIndex) > 0) {
+      skip = Number(pageIndex) * Number(pageSize);
+    } else if (Number(pageIndex) === 0) {
+      // Show all records if pageIndex is 0
+      skip = 0;
+      take = undefined;
+    }
 
     keywords = keywords ? keywords : "";
 
