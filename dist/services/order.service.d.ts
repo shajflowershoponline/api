@@ -2,14 +2,17 @@ import { CreateOrderDto } from "src/core/dto/order/order.create.dto";
 import { Order } from "src/db/entities/Order";
 import { Repository } from "typeorm";
 import { DeliveryService } from "./delivery.service";
-import { ConfigService } from "@nestjs/config";
 import { UpdateOrderStatusDto } from "src/core/dto/order/order.update.dto";
+import { SystemConfigService } from "./system-config.service";
+import { SystemConfig } from "src/db/entities/SystemConfig";
 export declare class OrderService {
     private readonly orderRepo;
     private readonly deliveryService;
-    private readonly config;
+    private readonly systemConfigService;
     private STORE_LOCATION_COORDINATES;
-    constructor(orderRepo: Repository<Order>, deliveryService: DeliveryService, config: ConfigService);
+    systemConfig: SystemConfig[];
+    constructor(orderRepo: Repository<Order>, deliveryService: DeliveryService, systemConfigService: SystemConfigService);
+    loadSystemConfig(): Promise<void>;
     getByCustomerUser({ customerUserId, pageSize, pageIndex, keywords }: {
         customerUserId: any;
         pageSize: any;

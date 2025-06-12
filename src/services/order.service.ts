@@ -25,21 +25,34 @@ import {
   UpdateStatusEnums,
 } from "src/core/dto/order/order.update.dto";
 import { Collection } from "src/db/entities/Collection";
+import { SystemConfigService } from "./system-config.service";
+import { SystemConfig } from "src/db/entities/SystemConfig";
 
 @Injectable()
 export class OrderService {
   private STORE_LOCATION_COORDINATES: { lat: number; lng: number };
+  systemConfig: SystemConfig[] = [];
   constructor(
     @InjectRepository(Order)
     private readonly orderRepo: Repository<Order>,
     private readonly deliveryService: DeliveryService,
-    private readonly config: ConfigService
+    private readonly systemConfigService: SystemConfigService
   ) {
-    const coordinates = this.config.get<string>("STORE_LOCATION_COORDINATES");
-    this.STORE_LOCATION_COORDINATES = {
-      lat: parseFloat(coordinates.split(",")[0] || "0"),
-      lng: parseFloat(coordinates.split(",")[1] || "0"),
-    };
+    this.loadSystemConfig();
+  }
+
+  async loadSystemConfig() {
+    this.systemConfig = await this.systemConfigService.getAll();
+    const storeCoordinateConfig = this.systemConfig.find(
+      (x) => x.key === "STORE_LOCATION_COORDINATES"
+    );
+
+    if (storeCoordinateConfig?.value) {
+      this.STORE_LOCATION_COORDINATES = {
+        lat: parseFloat(storeCoordinateConfig.value?.split(",")[0] || "0"),
+        lng: parseFloat(storeCoordinateConfig.value?.split(",")[1] || "0"),
+      };
+    }
   }
 
   async getByCustomerUser({ customerUserId, pageSize, pageIndex, keywords }) {
@@ -293,7 +306,7 @@ export class OrderService {
         order.discount = (subtotal - netDiscountAmount).toString();
         const delivery = await this.deliveryService.calculateDeliveryFee(
           this.STORE_LOCATION_COORDINATES,
-          dto.deliveryAddressCoordinates as { lat: number; lng: number }
+          order.deliveryAddressCoordinates as { lat: number; lng: number }
         );
         order.deliveryFee = delivery.deliveryFee.toString();
         order.total = (netDiscountAmount + delivery.deliveryFee).toString();

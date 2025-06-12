@@ -23,20 +23,28 @@ const Order_1 = require("../db/entities/Order");
 const OrderItems_1 = require("../db/entities/OrderItems");
 const typeorm_2 = require("typeorm");
 const delivery_service_1 = require("./delivery.service");
-const config_1 = require("@nestjs/config");
 const CustomerCoupon_1 = require("../db/entities/CustomerCoupon");
 const order_update_dto_1 = require("../core/dto/order/order.update.dto");
 const Collection_1 = require("../db/entities/Collection");
+const system_config_service_1 = require("./system-config.service");
 let OrderService = class OrderService {
-    constructor(orderRepo, deliveryService, config) {
+    constructor(orderRepo, deliveryService, systemConfigService) {
         this.orderRepo = orderRepo;
         this.deliveryService = deliveryService;
-        this.config = config;
-        const coordinates = this.config.get("STORE_LOCATION_COORDINATES");
-        this.STORE_LOCATION_COORDINATES = {
-            lat: parseFloat(coordinates.split(",")[0] || "0"),
-            lng: parseFloat(coordinates.split(",")[1] || "0"),
-        };
+        this.systemConfigService = systemConfigService;
+        this.systemConfig = [];
+        this.loadSystemConfig();
+    }
+    async loadSystemConfig() {
+        var _a, _b;
+        this.systemConfig = await this.systemConfigService.getAll();
+        const storeCoordinateConfig = this.systemConfig.find((x) => x.key === "STORE_LOCATION_COORDINATES");
+        if (storeCoordinateConfig === null || storeCoordinateConfig === void 0 ? void 0 : storeCoordinateConfig.value) {
+            this.STORE_LOCATION_COORDINATES = {
+                lat: parseFloat(((_a = storeCoordinateConfig.value) === null || _a === void 0 ? void 0 : _a.split(",")[0]) || "0"),
+                lng: parseFloat(((_b = storeCoordinateConfig.value) === null || _b === void 0 ? void 0 : _b.split(",")[1]) || "0"),
+            };
+        }
     }
     async getByCustomerUser({ customerUserId, pageSize, pageIndex, keywords }) {
         const skip = Number(pageIndex) > 0 ? Number(pageIndex) * Number(pageSize) : 0;
@@ -244,7 +252,7 @@ let OrderService = class OrderService {
                 }
                 order.subtotal = subtotal.toString();
                 order.discount = (subtotal - netDiscountAmount).toString();
-                const delivery = await this.deliveryService.calculateDeliveryFee(this.STORE_LOCATION_COORDINATES, dto.deliveryAddressCoordinates);
+                const delivery = await this.deliveryService.calculateDeliveryFee(this.STORE_LOCATION_COORDINATES, order.deliveryAddressCoordinates);
                 order.deliveryFee = delivery.deliveryFee.toString();
                 order.total = (netDiscountAmount + delivery.deliveryFee).toString();
                 order.orderCode = (0, utils_1.generateIndentityCode)(order.orderId);
@@ -327,7 +335,7 @@ OrderService = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(Order_1.Order)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         delivery_service_1.DeliveryService,
-        config_1.ConfigService])
+        system_config_service_1.SystemConfigService])
 ], OrderService);
 exports.OrderService = OrderService;
 //# sourceMappingURL=order.service.js.map
