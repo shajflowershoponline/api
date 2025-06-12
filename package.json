@@ -46,6 +46,7 @@
     "handlebars": "^4.7.8",
     "hbs": "^4.2.0",
     "http-proxy-middleware": "^3.0.0",
+    "jsonrepair": "^3.12.0",
     "moment": "^2.29.4",
     "moment-timezone": "^0.5.45",
     "nestjs-pusher": "^0.0.12",

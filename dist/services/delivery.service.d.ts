@@ -9,6 +9,7 @@ export declare class DeliveryService {
     private OPENROUTESERVICE_API_KEY;
     private OPENROUTESERVICE_API_URL;
     private DELIVERY_RATE;
+    private DELIVERY_FEE_MIN;
     systemConfig: SystemConfig[];
     constructor(config: ConfigService, systemConfigService: SystemConfigService, httpService: HttpService);
     loadSystemConfig(): Promise<void>;

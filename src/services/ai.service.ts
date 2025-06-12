@@ -15,6 +15,7 @@ import { ProductService } from "./product.service";
 import { CategoryService } from "./category.service";
 import { CustomerUserAiSearch } from "src/db/entities/CustomerUserAiSearch";
 import { Discounts } from "src/db/entities/Discounts";
+import { jsonrepair } from "jsonrepair";
 
 @Injectable()
 export class AIService {
@@ -46,18 +47,18 @@ export class AIService {
 
     return `
     You are a smart AI search assistant for an online flower shop.
-    
+
     When classifying and generating structured data, strictly follow:
-    
+
     - "category": MUST only be from these values: [${categoryNames}]
     - "productName": is the product title like "White Rose Bouquet"
     - "collections": like "Valentines", "Birthday", etc.
     - "color": valid flower colors
     - "giftAddOnsAvailable", "discountTags" are arrays of strings
     - "price", "maxPrice", "minPrice": MUST be direct numbers (not JSON objects)
-    
+
     ---
-        
+
     Follow STRICT rules for intent detection:
 
     -list_categories: If user mentions keywords like "types", "type", "category", "categories", "species", "kind", "kinds" of flower (e.g., "best type of flower for valentine's","best category of flower for valentine's","best categories","what is the best flower species","what is best flower types","categories for birthday","species for christmas") then its list_categories and not search_product.
@@ -67,7 +68,7 @@ export class AIService {
     -invalid_query: If completely unrelated to flowers or shop or if not about flowers, shopping, or bouquets.
 
     ---
-    
+
     Important rules:
     - NEVER output price as { "lte": 700 }. Only use numbers like "price": 700.
     - If user says "under 700", use "maxPrice": 700.
@@ -100,9 +101,9 @@ export class AIService {
       }
     }
     \`\`\`
-    
+
     ---
-    
+
     ▶ If intent = **list_trend**:
     \`\`\`json
     {
@@ -112,22 +113,22 @@ export class AIService {
     }
     \`\`\`
     (orderBy and orderDirection are optional; include only if user specifies)
-    
+
     ---
-    
+
     ▶ If intent = **list_categories**:
     \`\`\`json
     {
       "intent": "list_categories",
       "data": {
-        "occasions": ["Valentines"], // OPTIONAL
-        "collections": ["Valentines"], // OPTIONAL
-        "tags": ["Valentines", "Birthday", "Rose"], // OPTIONAL
-        "maxPrice": 700,// OPTIONAL
-        "minPrice": 0,// OPTIONAL
+        "occasions": ["Valentines"],
+        "collections": ["Valentines"],
+        "tags": ["Valentines", "Birthday", "Rose"],
+        "maxPrice": 700,
+        "minPrice": 0
       },
-      "orderBy": "price" | "popularity_score" | "order_count", // OPTIONAL
-      "orderDirection": "asc" | "desc" // OPTIONAL
+      "orderBy": "price" | "popularity_score" | "order_count",
+      "orderDirection": "asc" | "desc"
     }
     \`\`\`
     - If user specifies occasion like "Valentines", include collection.
@@ -139,21 +140,21 @@ export class AIService {
     - If user specifies ordering like "cheapest first", "most popular first", include orderBy + orderDirection.
 
     ---
-    
+
     ▶ If intent = **list_collections**:
     \`\`\`json
     {
       "intent": "list_collections",
       "data": {
-        "occasions": ["Valentines"], // OPTIONAL
-        "collections": ["Valentines"], // OPTIONAL
-        "categories": ["rose", "sunflower"], // OPTIONAL
-        "tags": ["Valentines", "Rose"], // OPTIONAL
-        "maxPrice": 700,// OPTIONAL
-        "minPrice": 0,// OPTIONAL
+        "occasions": ["Valentines"],
+        "collections": ["Valentines"],
+        "categories": ["rose", "sunflower"],
+        "tags": ["Valentines", "Rose"],
+        "maxPrice": 700,
+        "minPrice": 0
       },
-      "orderBy": "price" | "popularity_score" | "order_count", // OPTIONAL
-      "orderDirection": "asc" | "desc" // OPTIONAL
+      "orderBy": "price" | "popularity_score" | "order_count",
+      "orderDirection": "asc" | "desc"
     }
     \`\`\`
     - If user specifies occasion like "Valentines", include collection.
@@ -164,21 +165,21 @@ export class AIService {
     - If user specifies ordering like "cheapest first", "most popular first", include orderBy + orderDirection.
 
     ---
-    
+
     ▶ If intent = **list_colors**:
     \`\`\`json
     {
       "intent": "list_colors",
       "data": {
-        "occasions": ["Valentines"], // OPTIONAL
-        "collections": ["Valentines"], // OPTIONAL
-        "categories": ["rose", "sunflower"], // OPTIONAL
-        "tags": ["rose", "sunflower", "Valentines"], // OPTIONAL
-        "maxPrice": 700, // OPTIONAL
-        "minPrice": 0, // OPTIONAL
+        "occasions": ["Valentines"],
+        "collections": ["Valentines"],
+        "categories": ["rose", "sunflower"],
+        "tags": ["rose", "sunflower", "Valentines"],
+        "maxPrice": 700,
+        "minPrice": 0
       },
-      "orderBy": "price" | "popularity_score" | "order_count", // OPTIONAL
-      "orderDirection": "asc" | "desc" // OPTIONAL
+      "orderBy": "price" | "popularity_score" | "order_count",
+      "orderDirection": "asc" | "desc"
     }
     \`\`\`
     - If user specifies occasion like "Valentines", include collection.
@@ -186,31 +187,103 @@ export class AIService {
     - If user specifies the category like "what popular color does tulips have".
 
     ---
-    
+
     ▶ If intent = **invalid_query**:
     \`\`\`json
     {
       "intent": "invalid_query"
     }
     \`\`\`
-    
+
     ---
-    
+
     🚨 Very Important Behavior:
-    
+
     - If user asks for "best flower for Valentine's Day" → **search_product**, NOT list_categories.
     - Only detect **list_categories** if asking for "types", "categories", "flower species" themselves.
     - Do NOT confuse flower "event gift" with "flower type listing".
-    
-    ---
-    
+
+    - If the user query is abstract, conceptual, or symbolic — such as asking what flowers are associated with emotions, meanings, values, occasions, or symbolic ideas (e.g., "what flower represents love", "flowers that show loyalty", "flowers for healing", "flower that brings joy") — the AI must return multiple relevant options.
+    - The output should still match the correct intent type ('list_categories', 'list_collections', etc.).
+    - But the AI must **include multiple values** in fields like 'categories', 'collections', or 'tags', depending on the context of the question.
+
     🛡️ Safe Defaults:
     - If unsure about orderBy/orderDirection, you can omit it.
     - If unsure about collectionName, you can omit it.
-    
+
     ---
     User Query: ${userQuery}
-    `;
+  `;
+  }
+
+  extractMisplacedKeys(obj: any, parentKey: string): any {
+    const fixed = { ...obj };
+
+    if (Array.isArray(fixed[parentKey])) {
+      const validItems = [];
+      for (const item of fixed[parentKey]) {
+        if (typeof item === "string") {
+          validItems.push(item);
+        } else if (typeof item === "object" && !Array.isArray(item)) {
+          Object.assign(fixed, item); // lift up misplaced keys
+        }
+      }
+      fixed[parentKey] = validItems;
+    }
+
+    return fixed;
+  }
+
+  safeParseJson(aiMessage: string): any {
+    const firstCurly = aiMessage.indexOf("{");
+    const lastCurly = aiMessage.lastIndexOf("}");
+
+    if (firstCurly === -1 || lastCurly === -1) {
+      throw new Error("No JSON block detected in AI output.");
+    }
+
+    const jsonBlock = aiMessage
+      .slice(firstCurly, lastCurly + 1)
+      .replace(/,\s*}/g, "}")
+      .replace(/,\s*\]/g, "]")
+      .replace(/\[\s*,/g, "[")
+      .replace(/\]\s*\]/g, "]")
+      .replace(/\]\s*}/g, "]}");
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonBlock);
+    } catch {
+      try {
+        parsed = JSON.parse(jsonrepair(jsonBlock));
+      } catch (err) {
+        throw new Error("Failed to repair malformed JSON.");
+      }
+    }
+
+    if (parsed?.data) {
+      for (const key of ["collections", "categories", "color", "tags"]) {
+        if (parsed.data[key]) {
+          parsed.data = this.extractMisplacedKeys(parsed.data, key);
+        }
+      }
+    }
+
+    return parsed;
+  }
+
+  cleanData(data: any): any {
+    if (!data?.maxPrice || data?.maxPrice === undefined) {
+      data.maxPrice = 10000;
+      data.minPrice = 0;
+    } else if (
+      data?.maxPrice &&
+      Number(data?.maxPrice) > 0 &&
+      (!data?.minPrice || data?.minPrice === undefined)
+    ) {
+      data.minPrice = 0;
+    }
+    return data;
   }
 
   async handleSearch({ query, customerUserId }) {
@@ -242,45 +315,29 @@ export class AIService {
     console.log(aiMessage);
 
     let aiResult: any;
+
     try {
-      // Find first '{' and matching last '}'
-      const firstCurly = aiMessage.indexOf("{");
-      const lastCurly = aiMessage.lastIndexOf("}");
-
-      if (firstCurly === -1 || lastCurly === -1) {
-        throw new Error("No JSON block detected in AI output.");
-      }
-
-      // const cleanJson = aiMessage.slice(firstCurly, lastCurly + 1).trim();
-      const cleanJson = aiMessage
-        .slice(firstCurly, lastCurly + 1)
-        .replace(/\]\]/g, "]") // Clean up double brackets
-        .trim();
-
-      aiResult = JSON.parse(cleanJson);
+      aiResult = this.safeParseJson(aiMessage);
     } catch (err) {
       console.error("Parse Error:", err.message);
+      console.error("Raw AI Output:", aiMessage);
       throw new Error("Failed to parse AI output safely.");
     }
 
     const { intent, data, orderBy, orderDirection } = aiResult;
 
     let results = null;
-    if (data?.maxPrice === undefined && data?.minPrice === undefined) {
-      data.maxPrice = 10000;
-      data.minPrice = 0;
-    }
     if (intent === "search_product") {
-      results = await this.searchProducts(data, customerUserId);
+      results = await this.searchProducts(this.cleanData(data), customerUserId);
     } else if (intent === "list_categories") {
       results = await this.listCategories(
-        { ...data, orderBy, orderDirection },
+        { ...this.cleanData(data), orderBy, orderDirection },
         customerUserId
       );
     } else if (intent === "list_collections") {
       results = await this.listCollections(
         {
-          ...data,
+          ...this.cleanData(data),
           orderBy,
           orderDirection,
         },
@@ -288,7 +345,7 @@ export class AIService {
       );
     } else if (intent === "list_colors") {
       results = await this.listColors(
-        { ...data, orderBy, orderDirection },
+        { ...this.cleanData(data), orderBy, orderDirection },
         customerUserId
       );
     } else if (intent === "list_trend") {
@@ -310,6 +367,7 @@ export class AIService {
       params: aiResult,
     };
   }
+
   private async listCategories(data: any, customerUserId) {
     const qb = this.categoryRepository
       .createQueryBuilder("category")
@@ -427,7 +485,9 @@ export class AIService {
           relations: {
             category: { thumbnailFile: true },
             productCollections: { collection: true },
-            productImages: true,
+            productImages: {
+              file: true,
+            },
           },
         }),
         this.productRepository.count({
@@ -608,7 +668,9 @@ export class AIService {
           relations: {
             category: { thumbnailFile: true },
             productCollections: { collection: true },
-            productImages: true,
+            productImages: {
+              file: true,
+            },
           },
         }),
         this.productRepository.count({
@@ -783,7 +845,9 @@ export class AIService {
           relations: {
             category: { thumbnailFile: true },
             productCollections: { collection: true },
-            productImages: true,
+            productImages: {
+              file: true,
+            },
           },
         }),
         this.productRepository.count({
@@ -886,14 +950,8 @@ export class AIService {
         data.maxPrice = Number(data.price);
       }
       // If minPrice is set and less than price, use minPrice as min, else use price as min
-      if (
-        data.minPrice &&
-        !isNaN(Number(data.minPrice)) &&
-        Number(data.minPrice) > 0
-      ) {
+      if (data.minPrice && !isNaN(Number(data.minPrice))) {
         data.minPrice = Math.max(Number(data.price), Number(data.minPrice));
-      } else {
-        data.minPrice = Number(data.price);
       }
     } else {
       if (
@@ -979,7 +1037,8 @@ export class AIService {
                 )
             )
             : 0;
-        p["discountPrice"] = (Number(p.price ?? 0) - maxDiscount).toString();
+        p["discountPrice"] = Number(p.price ?? 0) - maxDiscount;
+        p["price"] = Number(p.price ?? 0) as any;
         p["isSale"] =
           p.discountTagsIds?.length + p.productCollections.length > 0 &&
           (p.productCollections.some(

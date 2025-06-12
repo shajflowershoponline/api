@@ -20,15 +20,20 @@ let DeliveryService = class DeliveryService {
         this.config = config;
         this.systemConfigService = systemConfigService;
         this.httpService = httpService;
-        this.DELIVERY_RATE = 10;
+        this.DELIVERY_RATE = 2;
+        this.DELIVERY_FEE_MIN = 20;
         this.systemConfig = [];
         this.OPENROUTESERVICE_API_URL = this.config.get("OPENROUTESERVICE_API_URL");
         this.OPENROUTESERVICE_API_KEY = this.config.get("OPENROUTESERVICE_API_KEY");
     }
     async loadSystemConfig() {
         this.systemConfig = await this.systemConfigService.getAll();
-        const deliveryRate = this.systemConfig.find((x) => x.key === "DELIVERY_RATE");
-        this.DELIVERY_RATE = deliveryRate ? Number(deliveryRate.value) : 10;
+        const deliveryRateConfig = this.systemConfig.find((x) => x.key === "DELIVERY_RATE");
+        if (deliveryRateConfig) {
+            const deliveryRate = JSON.parse((deliveryRateConfig === null || deliveryRateConfig === void 0 ? void 0 : deliveryRateConfig.value) || "{}");
+            this.DELIVERY_FEE_MIN = deliveryRate ? Number(deliveryRate.min) : 10;
+            this.DELIVERY_RATE = deliveryRate ? Number(deliveryRate.rateByKm) : 10;
+        }
     }
     async calculateDeliveryFee(pickupCoords, dropoffCoords) {
         var _a, _b, _c, _d, _e;
@@ -54,8 +59,8 @@ let DeliveryService = class DeliveryService {
             const distanceInMeters = summary.distance;
             const distanceInKm = distanceInMeters / 1000;
             const deliveryFee = distanceInKm >= 1
-                ? distanceInKm * this.DELIVERY_RATE
-                : this.DELIVERY_RATE;
+                ? (distanceInKm - 1) * this.DELIVERY_RATE + this.DELIVERY_FEE_MIN
+                : this.DELIVERY_FEE_MIN;
             return {
                 distanceInKm: +distanceInKm.toFixed(2),
                 deliveryFee: +deliveryFee.toFixed(2),

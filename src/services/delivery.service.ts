@@ -10,7 +10,8 @@ import { SystemConfigService } from "./system-config.service";
 export class DeliveryService {
   private OPENROUTESERVICE_API_KEY;
   private OPENROUTESERVICE_API_URL;
-  private DELIVERY_RATE = 10; // ₱10 per KM
+  private DELIVERY_RATE = 2; // ₱10 per KM
+  private DELIVERY_FEE_MIN = 20; // ₱10 per KM
 
   systemConfig: SystemConfig[] = [];
 
@@ -29,11 +30,18 @@ export class DeliveryService {
 
   async loadSystemConfig() {
     this.systemConfig = await this.systemConfigService.getAll();
-    const deliveryRate = this.systemConfig.find(
+    const deliveryRateConfig = this.systemConfig.find(
       (x) => x.key === "DELIVERY_RATE"
     );
 
-    this.DELIVERY_RATE = deliveryRate ? Number(deliveryRate.value) : 10;
+    if (deliveryRateConfig) {
+      const deliveryRate: { min: number; rateByKm: number } = JSON.parse(
+        deliveryRateConfig?.value || "{}"
+      );
+
+      this.DELIVERY_FEE_MIN = deliveryRate ? Number(deliveryRate.min) : 10;
+      this.DELIVERY_RATE = deliveryRate ? Number(deliveryRate.rateByKm) : 10;
+    }
   }
 
   async calculateDeliveryFee(
@@ -68,8 +76,8 @@ export class DeliveryService {
       const distanceInKm = distanceInMeters / 1000;
       const deliveryFee =
         distanceInKm >= 1
-          ? distanceInKm * this.DELIVERY_RATE
-          : this.DELIVERY_RATE;
+          ? (distanceInKm - 1) * this.DELIVERY_RATE + this.DELIVERY_FEE_MIN
+          : this.DELIVERY_FEE_MIN;
 
       return {
         distanceInKm: +distanceInKm.toFixed(2),

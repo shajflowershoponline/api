@@ -26,6 +26,9 @@ export declare class AIService {
     private readonly customerUserAiSearchRepository;
     constructor(config: ConfigService, productService: ProductService, categoryService: CategoryService, httpService: HttpService, productRepository: Repository<Product>, categoryRepository: Repository<Category>, collectionRepository: Repository<Collection>, productCollectionRepository: Repository<ProductCollection>, orderItemsRepository: Repository<OrderItems>, cartItemsRepository: Repository<CartItems>, wishlistRepository: Repository<CustomerUserWishlist>, customerUserAiSearchRepository: Repository<CustomerUserAiSearch>);
     private buildPrompt;
+    extractMisplacedKeys(obj: any, parentKey: string): any;
+    safeParseJson(aiMessage: string): any;
+    cleanData(data: any): any;
     handleSearch({ query, customerUserId }: {
         query: any;
         customerUserId: any;
