@@ -294,6 +294,10 @@ let OrderService = class OrderService {
                     throw Error(order_constant_1.ORDER_ERROR_NOT_FOUND);
                 }
                 if (order.status === dto.status &&
+                    dto.status === order_update_dto_1.UpdateStatusEnums.PROCESSING) {
+                    throw Error("Order already processing");
+                }
+                if (order.status === dto.status &&
                     dto.status === order_update_dto_1.UpdateStatusEnums.DELIVERY) {
                     throw Error("Order already in delivery");
                 }
@@ -306,17 +310,20 @@ let OrderService = class OrderService {
                     throw Error("Order already in delivery");
                 }
                 if (order.status === order_update_dto_1.UpdateStatusEnums.COMPLETED &&
-                    (dto.status === order_update_dto_1.UpdateStatusEnums.DELIVERY ||
+                    (dto.status === order_update_dto_1.UpdateStatusEnums.PROCESSING ||
+                        dto.status === order_update_dto_1.UpdateStatusEnums.DELIVERY ||
                         dto.status === order_update_dto_1.UpdateStatusEnums.CANCELLED)) {
                     throw Error("Order already in compeleted");
                 }
                 if (order.status === order_update_dto_1.UpdateStatusEnums.DELIVERY &&
-                    (dto.status === order_update_dto_1.UpdateStatusEnums.CANCELLED ||
+                    (dto.status === order_update_dto_1.UpdateStatusEnums.PROCESSING ||
+                        dto.status === order_update_dto_1.UpdateStatusEnums.CANCELLED ||
                         dto.status === order_update_dto_1.UpdateStatusEnums.COMPLETED)) {
                     throw Error("Order already in delivery");
                 }
                 if (order.status === order_update_dto_1.UpdateStatusEnums.CANCELLED &&
-                    (dto.status === order_update_dto_1.UpdateStatusEnums.DELIVERY ||
+                    (dto.status === order_update_dto_1.UpdateStatusEnums.PROCESSING ||
+                        dto.status === order_update_dto_1.UpdateStatusEnums.DELIVERY ||
                         dto.status === order_update_dto_1.UpdateStatusEnums.COMPLETED)) {
                     throw Error("Order already in cancelled");
                 }

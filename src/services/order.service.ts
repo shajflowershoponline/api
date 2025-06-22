@@ -351,6 +351,13 @@ export class OrderService {
 
         if (
           order.status === dto.status &&
+          dto.status === UpdateStatusEnums.PROCESSING
+        ) {
+          throw Error("Order already processing");
+        }
+
+        if (
+          order.status === dto.status &&
           dto.status === UpdateStatusEnums.DELIVERY
         ) {
           throw Error("Order already in delivery");
@@ -372,7 +379,8 @@ export class OrderService {
 
         if (
           order.status === UpdateStatusEnums.COMPLETED &&
-          (dto.status === UpdateStatusEnums.DELIVERY ||
+          (dto.status === UpdateStatusEnums.PROCESSING ||
+            dto.status === UpdateStatusEnums.DELIVERY ||
             dto.status === UpdateStatusEnums.CANCELLED)
         ) {
           throw Error("Order already in compeleted");
@@ -380,7 +388,8 @@ export class OrderService {
 
         if (
           order.status === UpdateStatusEnums.DELIVERY &&
-          (dto.status === UpdateStatusEnums.CANCELLED ||
+          (dto.status === UpdateStatusEnums.PROCESSING ||
+            dto.status === UpdateStatusEnums.CANCELLED ||
             dto.status === UpdateStatusEnums.COMPLETED)
         ) {
           throw Error("Order already in delivery");
@@ -388,7 +397,8 @@ export class OrderService {
 
         if (
           order.status === UpdateStatusEnums.CANCELLED &&
-          (dto.status === UpdateStatusEnums.DELIVERY ||
+          (dto.status === UpdateStatusEnums.PROCESSING ||
+            dto.status === UpdateStatusEnums.DELIVERY ||
             dto.status === UpdateStatusEnums.COMPLETED)
         ) {
           throw Error("Order already in cancelled");

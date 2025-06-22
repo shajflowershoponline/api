@@ -1,4 +1,5 @@
 export declare enum UpdateStatusEnums {
+    PROCESSING = "PROCESSING",
     DELIVERY = "DELIVERY",
     COMPLETED = "COMPLETED",
     CANCELLED = "CANCELLED"

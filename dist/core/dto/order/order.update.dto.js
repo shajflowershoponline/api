@@ -14,6 +14,7 @@ const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
 var UpdateStatusEnums;
 (function (UpdateStatusEnums) {
+    UpdateStatusEnums["PROCESSING"] = "PROCESSING";
     UpdateStatusEnums["DELIVERY"] = "DELIVERY";
     UpdateStatusEnums["COMPLETED"] = "COMPLETED";
     UpdateStatusEnums["CANCELLED"] = "CANCELLED";
@@ -24,7 +25,7 @@ __decorate([
     (0, swagger_1.ApiProperty)({
         enum: UpdateStatusEnums,
         description: "Status of the order",
-        example: UpdateStatusEnums.DELIVERY,
+        example: UpdateStatusEnums.PROCESSING,
     }),
     (0, class_validator_1.IsEnum)(UpdateStatusEnums),
     __metadata("design:type", String)

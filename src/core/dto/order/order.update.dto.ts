@@ -15,6 +15,7 @@ import {
 import { CoordinatesDto } from "../map/map.dto";
 
 export enum UpdateStatusEnums {
+  PROCESSING = "PROCESSING",
   DELIVERY = "DELIVERY",
   COMPLETED = "COMPLETED",
   CANCELLED = "CANCELLED",
@@ -24,7 +25,7 @@ export class UpdateOrderStatusDto {
   @ApiProperty({
     enum: UpdateStatusEnums,
     description: "Status of the order",
-    example: UpdateStatusEnums.DELIVERY,
+    example: UpdateStatusEnums.PROCESSING,
   })
   @IsEnum(UpdateStatusEnums)
   status: UpdateStatusEnums;
