@@ -122,6 +122,9 @@ export class CartService {
               product: {
                 productId: dto.productId,
               },
+              customerUser: {
+                customerUserId: dto.customerUserId,
+              },
               active: true,
             },
             relations: {
